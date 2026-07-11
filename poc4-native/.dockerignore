@@ -1,0 +1,6 @@
+build/
+.gradle/
+.konan/
+docker/out/
+native/glfw/lib/
+native/glfw/include/

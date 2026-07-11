@@ -1,0 +1,4 @@
+headers = GLFW/glfw3.h
+package = glfw
+# GLFW pulls GL/gl.h by default; skiko provides its own GL, so skip it.
+compilerOpts = -DGLFW_INCLUDE_NONE

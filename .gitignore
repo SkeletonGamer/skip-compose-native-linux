@@ -1,0 +1,42 @@
+# Build outputs
+.build/
+build/
+.gradle/
+.konan/
+*.xcodeproj/xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Skip
+.skip/
+
+# IDE
+.idea/
+*.iml
+local.properties
+
+# Local checkout of JetBrains/compose-multiplatform-core (see README "Reproduce").
+# No trailing slash: also ignores a `.cmc` symlink to a checkout elsewhere.
+.cmc
+
+# Third-party native libs/headers: obtained at build time (apt in the Docker image), not vendored
+**/native/glfw/lib/
+**/native/glfw/include/
+
+# Docker render outputs, run captures, build scratch (regenerated)
+**/docker/out/
+**/out/
+**/bin/
+**/.kotlin/
+
+# Internal guidance (strategy context; not published)
+CLAUDE.md
+.claude/
+
+# Skip's transpiled Kotlin output (obtained via `skip export`; licensing; large)
+export/
+
+# Native libs staging (scripts/fetch-deps.sh)
+.native-stage/

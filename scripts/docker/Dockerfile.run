@@ -1,0 +1,19 @@
+# Shared runner image for every native POC (poc3/poc4/poc5/poc6): run a pre-built linuxArm64 .kexe in a
+# Linux arm64 container under Xvfb, software GL (mesa llvmpipe). No JVM in the produced binary. The actual
+# command (which .kexe to run) is supplied by scripts/run-native.sh, so this image is POC-agnostic.
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        xvfb xauth \
+        libglfw3 \
+        libgl1-mesa-dri libglx-mesa0 libgl1 libegl1 libgles2 \
+        libfontconfig1 libfreetype6 fonts-dejavu-core \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV GALLIUM_DRIVER=llvmpipe
+WORKDIR /app
+
+# run-native.sh overrides the command with the specific /app/<poc>.kexe; /out is bind-mounted for PNGs.
+CMD ["bash","-lc","echo 'run via scripts/run-native.sh'"]

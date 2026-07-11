@@ -1,0 +1,878 @@
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/Date.kt b/SkipFoundation/src/main/kotlin/skip/foundation/Date.kt
+index 3750283..4222baa 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/Date.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/Date.kt
+@@ -1,0 +2 @@ package skip.foundation
++import java.lang.System
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/Dispatch.kt b/SkipFoundation/src/main/kotlin/skip/foundation/Dispatch.kt
+index 63eb1a1..28b51d3 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/Dispatch.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/Dispatch.kt
+@@ -1,0 +2 @@ package skip.foundation
++import java.lang.System
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/FileManager.kt b/SkipFoundation/src/main/kotlin/skip/foundation/FileManager.kt
+index a630d27..ff30346 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/FileManager.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/FileManager.kt
+@@ -1,0 +2 @@ package skip.foundation
++import java.lang.System
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/JSONSerialization+Parser.kt b/SkipFoundation/src/main/kotlin/skip/foundation/JSONSerialization+Parser.kt
+index da183e0..e8b6c74 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/JSONSerialization+Parser.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/JSONSerialization+Parser.kt
+@@ -1,0 +2 @@ package skip.foundation
++import java.lang.Integer
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/ProcessInfo.kt b/SkipFoundation/src/main/kotlin/skip/foundation/ProcessInfo.kt
+index 3478071..e3a6388 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/ProcessInfo.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/ProcessInfo.kt
+@@ -1,0 +2,3 @@ package skip.foundation
++import java.lang.System
++import java.lang.Runtime
++import java.lang.Class
+@@ -35,3 +38 @@ open class ProcessInfo {
+-            return Class.forName("androidx.test.core.app.ApplicationProvider")
+-                .getDeclaredMethod("getApplicationContext")
+-                .invoke(null) as android.content.Context
++            return android.content.DesktopContext
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/String.kt b/SkipFoundation/src/main/kotlin/skip/foundation/String.kt
+index 45d9a74..30a847d 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/String.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/String.kt
+@@ -119 +119 @@ fun String.Companion.localizedStringWithFormat(format: String, vararg arguments:
+-    val platformArguments = list.toArray()
++    val platformArguments = list.toTypedArray()
+@@ -127 +127 @@ fun String.Companion.localizedStringWithFormat(format: String, vararg arguments:
+-        return java.lang.String.format(locale, format, platformArguments)
++        return format.format(*platformArguments)
+@@ -211 +211 @@ fun String.write(toFile: String, atomically: Boolean, encoding: StringEncoding)
+-fun String(data: Data, encoding: StringEncoding): String? = (java.lang.String(data.platformValue, encoding.rawValue) as kotlin.String?).sref()
++fun String(data: Data, encoding: StringEncoding): String? = (data.platformValue.decodeToString() as kotlin.String?).sref()
+@@ -218 +218 @@ fun String(bytes: Array<UByte>, encoding: StringEncoding): String? {
+-fun String(contentsOf: URL): String = contentsOf.absoluteURL.platformValue.toURL().readText()
++fun String(contentsOf: URL): String = Data(contentsOf = contentsOf).platformValue.decodeToString()
+@@ -220 +220 @@ fun String(contentsOf: URL): String = contentsOf.absoluteURL.platformValue.toURL
+-fun String(contentsOf: URL, encoding: StringEncoding): String = (java.lang.String(Data(contentsOf = contentsOf).platformValue, encoding.rawValue) as kotlin.String).sref()
++fun String(contentsOf: URL, encoding: StringEncoding): String = (Data(contentsOf = contentsOf).platformValue.decodeToString() as kotlin.String).sref()
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/URL.kt b/SkipFoundation/src/main/kotlin/skip/foundation/URL.kt
+index b75f629..2cd4a00 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/URL.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/URL.kt
+@@ -5,0 +6 @@ package skip.foundation
++import java.lang.System
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/URLSessionTask.kt b/SkipFoundation/src/main/kotlin/skip/foundation/URLSessionTask.kt
+index 70f422c..f1dab5a 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/URLSessionTask.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/URLSessionTask.kt
+@@ -894 +894 @@ private suspend fun genericResponse(for_: URLRequest, with: URL, isForResponse:
+-    return withContext(job + Dispatchers.IO) l@{ ->
++    return withContext(job + Dispatchers.Default) l@{ ->
+@@ -933 +933 @@ private suspend fun contentResponse(for_: URLRequest, with: URL, isForResponse:
+-    return withContext(job + Dispatchers.IO) l@{ ->
++    return withContext(job + Dispatchers.Default) l@{ ->
+diff --git a/SkipFoundation/src/main/kotlin/skip/foundation/UrlEncoderUtil.kt b/SkipFoundation/src/main/kotlin/skip/foundation/UrlEncoderUtil.kt
+index 6dc44d2..c36628d 100644
+--- a/SkipFoundation/src/main/kotlin/skip/foundation/UrlEncoderUtil.kt
++++ b/SkipFoundation/src/main/kotlin/skip/foundation/UrlEncoderUtil.kt
+@@ -143,2 +142,0 @@ object UrlEncoderUtil {
+-    @JvmStatic
+-    @JvmOverloads
+@@ -211,2 +208,0 @@ object UrlEncoderUtil {
+-    @JvmStatic
+-    @JvmOverloads
+diff --git a/SkipLib/src/main/kotlin/skip/lib/AsyncStream.kt b/SkipLib/src/main/kotlin/skip/lib/AsyncStream.kt
+index 1da3862..8c623fd 100644
+--- a/SkipLib/src/main/kotlin/skip/lib/AsyncStream.kt
++++ b/SkipLib/src/main/kotlin/skip/lib/AsyncStream.kt
+@@ -620,3 +620,2 @@ class AsyncStreamSwiftDataSource<Element> {
+-    @JvmName("Swift_next")
+-    internal external fun Swift_next(Swift_producer: Long, callback: (Any?) -> Unit)
+-    internal external fun Swift_release(Swift_producer: Long): Long
++    internal fun Swift_next(Swift_producer: Long, callback: (Any?) -> Unit) { throw NotImplementedError("Swift interop unused on K/N") }
++    internal fun Swift_release(Swift_producer: Long): Long = throw NotImplementedError("Swift interop unused on K/N")
+@@ -668,3 +667,2 @@ class AsyncThrowingStreamSwiftDataSource<Element> {
+-    @JvmName("Swift_next")
+-    internal external fun Swift_next(Swift_producer: Long, callback: (Any?, Throwable?) -> Unit)
+-    internal external fun Swift_release(Swift_producer: Long): Long
++    internal fun Swift_next(Swift_producer: Long, callback: (Any?, Throwable?) -> Unit) { throw NotImplementedError("Swift interop unused on K/N") }
++    internal fun Swift_release(Swift_producer: Long): Long = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipModel/src/main/kotlin/skip/model/Publisher.kt b/SkipModel/src/main/kotlin/skip/model/Publisher.kt
+index 82c6dee..44c0890 100644
+--- a/SkipModel/src/main/kotlin/skip/model/Publisher.kt
++++ b/SkipModel/src/main/kotlin/skip/model/Publisher.kt
+@@ -4,0 +5,2 @@ package skip.model
++import skip.lib.synchronized
++
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Actions.kt b/SkipUI/src/main/kotlin/skip/ui/Actions.kt
+index eba1dcf..42a9d69 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Actions.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Actions.kt
+@@ -20 +20 @@ class DismissAction: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -42 +42 @@ class OpenURLAction: skip.lib.SwiftProjecting {
+-        private external fun Swift_projectionImpl(options: Int): () -> Any
++        private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -96 +96 @@ class OpenURLAction: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -141 +141 @@ class RefreshAction: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Animation.kt b/SkipUI/src/main/kotlin/skip/ui/Animation.kt
+index 1acc0cc..0c3e835 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Animation.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Animation.kt
+@@ -192 +192 @@ class Animation: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/AppStorageSupport.kt b/SkipUI/src/main/kotlin/skip/ui/AppStorageSupport.kt
+index ac34afd..d3dce89 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/AppStorageSupport.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/AppStorageSupport.kt
+@@ -211 +211 @@ class AppStorageSupport: StateTracker, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/AsyncImage.kt b/SkipUI/src/main/kotlin/skip/ui/AsyncImage.kt
+index bbeabef..159e511 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/AsyncImage.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/AsyncImage.kt
+@@ -81 +81 @@ class AsyncImageBridgedContentArguments: MutableStruct, skip.lib.SwiftProjecting
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -232,9 +232 @@ class AsyncImage: View, Renderable, skip.lib.SwiftProjecting {
+-                return@l ImageRequest.Builder(androidContext)
+-                    .fetcherFactory(AssetURLFetcher.Factory())
+-                    .decoderFactory(coil3.svg.SvgDecoder.Factory())
+-                    .decoderFactory(PdfDecoder.Factory())
+-                    .data(requestSource)
+-                    .size(coil3.size.Size(width = maxPx, height = maxPx))
+-                    .memoryCacheKey(cacheKey)
+-                    .diskCacheKey(cacheKey)
+-                    .build()
++                return@l null // POC 6: Android coil image loading disabled (desktop coil PlatformContext mismatch)
+@@ -260,9 +252 @@ class AsyncImage: View, Renderable, skip.lib.SwiftProjecting {
+-            return@l ImageRequest.Builder(androidContext)
+-                .fetcherFactory(AssetURLFetcher.Factory())
+-                .decoderFactory(coil3.svg.SvgDecoder.Factory())
+-                .decoderFactory(PdfDecoder.Factory())
+-                .data(requestSource)
+-                .size(sizeResolver)
+-                .memoryCacheKey(cacheKey)
+-                .diskCacheKey(cacheKey)
+-                .build()
++            return@l null // POC 6: Android coil image loading disabled (desktop coil PlatformContext mismatch)
+@@ -299 +283 @@ class AsyncImage: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -457 +441 @@ internal open class PdfDecoder: coil3.decode.Decoder {
+-            val density = options.context.resources.displayMetrics.density.sref()
++            val density = (1f).sref() // POC 6: ComposeContext has no android resources on desktop
+@@ -477,2 +461,2 @@ internal open class PdfDecoder: coil3.decode.Decoder {
+-            val drawable = android.graphics.drawable.BitmapDrawable(options.context.resources, bitmap)
+-            return@l coil3.decode.DecodeResult(image = drawable.asImage(), isSampled = true)
++            val drawable = android.graphics.drawable.BitmapDrawable(null, bitmap)
++            return@l null // POC 6: Android coil Drawable.asImage() unavailable on desktop (image path unused)
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Button.kt b/SkipUI/src/main/kotlin/skip/ui/Button.kt
+index 2f824dd..8d4bf49 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Button.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Button.kt
+@@ -156 +156 @@ class Button: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Color.kt b/SkipUI/src/main/kotlin/skip/ui/Color.kt
+index f517e08..1111fa0 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Color.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Color.kt
+@@ -246 +246 @@ class Color: ShapeStyle, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/CompletionHandler.kt b/SkipUI/src/main/kotlin/skip/ui/CompletionHandler.kt
+index bdd732d..4d79546 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/CompletionHandler.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/CompletionHandler.kt
+@@ -23 +23 @@ class CompletionHandler: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -45 +45 @@ class ValueCompletionHandler: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ComposeBuilder.kt b/SkipUI/src/main/kotlin/skip/ui/ComposeBuilder.kt
+index 0cf67c5..275df23 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ComposeBuilder.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ComposeBuilder.kt
+@@ -76 +76 @@ class ComposeBuilder: View, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ComposeView.kt b/SkipUI/src/main/kotlin/skip/ui/ComposeView.kt
+index 98f05e0..ba87ade 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ComposeView.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ComposeView.kt
+@@ -34 +34 @@ class ComposeView: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/DatePicker.kt b/SkipUI/src/main/kotlin/skip/ui/DatePicker.kt
+index babe948..24a3162 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/DatePicker.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/DatePicker.kt
+@@ -274 +274 @@ class DatePicker: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/DisclosureGroup.kt b/SkipUI/src/main/kotlin/skip/ui/DisclosureGroup.kt
+index ee3e875..9145829 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/DisclosureGroup.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/DisclosureGroup.kt
+@@ -198 +198 @@ class DisclosureGroup: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Divider.kt b/SkipUI/src/main/kotlin/skip/ui/Divider.kt
+index bd6c3c6..f508dac 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Divider.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Divider.kt
+@@ -33 +33 @@ class Divider: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/EmptyModifier.kt b/SkipUI/src/main/kotlin/skip/ui/EmptyModifier.kt
+index a21f7c7..1aca7eb 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/EmptyModifier.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/EmptyModifier.kt
+@@ -21 +21 @@ class EmptyModifier: ViewModifier, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/EmptyView.kt b/SkipUI/src/main/kotlin/skip/ui/EmptyView.kt
+index 66d2bf7..eab3070 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/EmptyView.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/EmptyView.kt
+@@ -18 +18 @@ class EmptyView: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/EnvironmentSupport.kt b/SkipUI/src/main/kotlin/skip/ui/EnvironmentSupport.kt
+index e863f5b..ca2f3f9 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/EnvironmentSupport.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/EnvironmentSupport.kt
+@@ -33 +33 @@ class EnvironmentSupport: skip.lib.SwiftProjecting {
+-    private external fun Swift_release(Swift_valueHolder: Long): Long
++    private fun Swift_release(Swift_valueHolder: Long): Long = throw NotImplementedError("Swift interop unused on K/N")
+@@ -42 +42 @@ class EnvironmentSupport: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/EquatableView.kt b/SkipUI/src/main/kotlin/skip/ui/EquatableView.kt
+index ddd2300..737cdbd 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/EquatableView.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/EquatableView.kt
+@@ -21 +21 @@ class EquatableView: View, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Font.kt b/SkipUI/src/main/kotlin/skip/ui/Font.kt
+index da422dc..1f3dc3c 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Font.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Font.kt
+@@ -333 +333 @@ class Font: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -459 +459 @@ class Font: skip.lib.SwiftProjecting {
+-                    fontFamily = FontFamily(typeface)
++                    fontFamily = androidx.compose.ui.text.font.FontFamily.Default // POC 6: CMP has no FontFamily(Typeface)
+@@ -467 +467 @@ class Font: skip.lib.SwiftProjecting {
+-                    fontFamily = FontFamily(customTypeface)
++                    fontFamily = androidx.compose.ui.text.font.FontFamily.Default // POC 6: CMP has no FontFamily(Typeface)
+@@ -548 +548 @@ enum class LegibilityWeight: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ForEach.kt b/SkipUI/src/main/kotlin/skip/ui/ForEach.kt
+index 62ca485..9e36dc4 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ForEach.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ForEach.kt
+@@ -406 +406 @@ class ForEach: View, Renderable, LazyItemFactory, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Form.kt b/SkipUI/src/main/kotlin/skip/ui/Form.kt
+index 6341e39..efa5c89 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Form.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Form.kt
+@@ -26 +26 @@ class Form: View, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/GeometryProxy.kt b/SkipUI/src/main/kotlin/skip/ui/GeometryProxy.kt
+index d56d6c3..c73e7f0 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/GeometryProxy.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/GeometryProxy.kt
+@@ -78 +78 @@ class GeometryProxy: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/GeometryReader.kt b/SkipUI/src/main/kotlin/skip/ui/GeometryReader.kt
+index 6936313..c679381 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/GeometryReader.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/GeometryReader.kt
+@@ -37 +37 @@ class GeometryReader: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Gesture.kt b/SkipUI/src/main/kotlin/skip/ui/Gesture.kt
+index abbbf9f..ee207e5 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Gesture.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Gesture.kt
+@@ -262 +262 @@ class DragGesture: Gesture<DragGesture.Value>, BridgedGesture, MutableStruct, sk
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -294 +294 @@ class DragGestureValue: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -341 +341 @@ class TapGesture: Gesture<Unit>, BridgedGesture, MutableStruct, skip.lib.SwiftPr
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -381 +381 @@ class LongPressGesture: Gesture<Boolean>, BridgedGesture, MutableStruct, skip.li
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -474 +474 @@ class MagnifyGesture: Gesture<MagnifyGesture.Value>, BridgedGesture, MutableStru
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -502 +502 @@ class MagnifyGestureValue: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -605 +605 @@ class RotateGesture: Gesture<RotateGesture.Value>, BridgedGesture, MutableStruct
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -633 +633 @@ class RotateGestureValue: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Gradient.kt b/SkipUI/src/main/kotlin/skip/ui/Gradient.kt
+index 3f23d69..bbd050b 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Gradient.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Gradient.kt
+@@ -210 +210 @@ class LinearGradient: ShapeStyle, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -292 +292 @@ class EllipticalGradient: ShapeStyle, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -371 +371 @@ class RadialGradient: ShapeStyle, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Grid.kt b/SkipUI/src/main/kotlin/skip/ui/Grid.kt
+index cc542b7..60ec670 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Grid.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Grid.kt
+@@ -28 +28 @@ class GridItem: MutableStruct, skip.lib.SwiftProjecting {
+-        private external fun Swift_projectionImpl(options: Int): () -> Any
++        private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -88 +88 @@ class GridItem: MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Group.kt b/SkipUI/src/main/kotlin/skip/ui/Group.kt
+index 2c4423c..028b72f 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Group.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Group.kt
+@@ -37 +37 @@ class Group: View, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/GroupBox.kt b/SkipUI/src/main/kotlin/skip/ui/GroupBox.kt
+index 30294a2..1b0d5ed 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/GroupBox.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/GroupBox.kt
+@@ -77 +77 @@ class GroupBox: View, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/HStack.kt b/SkipUI/src/main/kotlin/skip/ui/HStack.kt
+index f6c7cce..05a393a 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/HStack.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/HStack.kt
+@@ -234 +234 @@ class HStack: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Image.kt b/SkipUI/src/main/kotlin/skip/ui/Image.kt
+index dfeb8f3..53e8fab 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Image.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Image.kt
+@@ -243,9 +243 @@ class Image: View, Renderable, MutableStruct, skip.lib.SwiftProjecting {
+-                return@l ImageRequest.Builder(androidContext)
+-                    .fetcherFactory(AssetURLFetcher.Factory())
+-                    .decoderFactory(coil3.svg.SvgDecoder.Factory())
+-                    .decoderFactory(PdfDecoder.Factory())
+-                    .data(asset.url)
+-                    .size(coil3.size.Size(width = maxPx, height = maxPx))
+-                    .memoryCacheKey(cacheKey)
+-                    .diskCacheKey(cacheKey)
+-                    .build()
++                return@l null // POC 6: Android coil image loading disabled (desktop coil uses coil3.PlatformContext, not android.Context)
+@@ -266,9 +258 @@ class Image: View, Renderable, MutableStruct, skip.lib.SwiftProjecting {
+-            return@l ImageRequest.Builder(androidContext)
+-                .fetcherFactory(AssetURLFetcher.Factory())
+-                .decoderFactory(coil3.svg.SvgDecoder.Factory())
+-                .decoderFactory(PdfDecoder.Factory())
+-                .data(asset.url)
+-                .size(sizeResolver)
+-                .memoryCacheKey(cacheKey)
+-                .diskCacheKey(cacheKey)
+-                .build()
++            return@l null // POC 6: Android coil image loading disabled (desktop coil PlatformContext mismatch)
+@@ -628 +612 @@ class Image: View, Renderable, MutableStruct, skip.lib.SwiftProjecting {
+-        private external fun Swift_projectionImpl(options: Int): () -> Any
++        private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -757 +741 @@ class Image: View, Renderable, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Label.kt b/SkipUI/src/main/kotlin/skip/ui/Label.kt
+index fc94793..3746d0c 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Label.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Label.kt
+@@ -178 +178 @@ class Label: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/LabeledContent.kt b/SkipUI/src/main/kotlin/skip/ui/LabeledContent.kt
+index 26e8cf3..e44bd00 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/LabeledContent.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/LabeledContent.kt
+@@ -111 +111 @@ class LabeledContent: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/LazyHGrid.kt b/SkipUI/src/main/kotlin/skip/ui/LazyHGrid.kt
+index a90f0cc..82a45a6 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/LazyHGrid.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/LazyHGrid.kt
+@@ -176 +176 @@ class LazyHGrid: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/LazyHStack.kt b/SkipUI/src/main/kotlin/skip/ui/LazyHStack.kt
+index eca5375..5d2a7a4 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/LazyHStack.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/LazyHStack.kt
+@@ -155 +155 @@ class LazyHStack: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/LazyVGrid.kt b/SkipUI/src/main/kotlin/skip/ui/LazyVGrid.kt
+index 8f00d6a..ea8ecad 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/LazyVGrid.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/LazyVGrid.kt
+@@ -206 +206 @@ class LazyVGrid: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/LazyVStack.kt b/SkipUI/src/main/kotlin/skip/ui/LazyVStack.kt
+index c44677f..b69460c 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/LazyVStack.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/LazyVStack.kt
+@@ -187 +187 @@ class LazyVStack: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Link.kt b/SkipUI/src/main/kotlin/skip/ui/Link.kt
+index 89d74b0..c357012 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Link.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Link.kt
+@@ -60 +60 @@ class Link: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/List.kt b/SkipUI/src/main/kotlin/skip/ui/List.kt
+index 0977907..82c0bd1 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/List.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/List.kt
+@@ -1,0 +2 @@ package skip.ui
++import java.lang.System
+@@ -1093 +1094 @@ class List: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Menu.kt b/SkipUI/src/main/kotlin/skip/ui/Menu.kt
+index 49fe629..a9d4f5a 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Menu.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Menu.kt
+@@ -136 +136 @@ class Menu: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Navigation.kt b/SkipUI/src/main/kotlin/skip/ui/Navigation.kt
+index 7533823..13c2e9d 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Navigation.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Navigation.kt
+@@ -727 +727 @@ class NavigationStack: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -1609 +1609 @@ class NavDisplayTransitionOptions: skip.lib.SwiftProjecting {
+-        private external fun Swift_projectionImpl(options: Int): () -> Any
++        private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -1652 +1652 @@ class NavDisplayTransitionOptions: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -1853 +1853 @@ class NavigationLink: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Path.kt b/SkipUI/src/main/kotlin/skip/ui/Path.kt
+index 1676722..d946137 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Path.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Path.kt
+@@ -490 +490 @@ class Path: Shape, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Picker.kt b/SkipUI/src/main/kotlin/skip/ui/Picker.kt
+index 3c78d55..40e099b 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Picker.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Picker.kt
+@@ -338 +338 @@ class Picker<SelectionValue>: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -587 +587 @@ class Material3SegmentedButtonOptions: MutableStruct {
+-    constructor(index: Int, count: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier, enabled: Boolean, shape: androidx.compose.ui.graphics.Shape, colors: SegmentedButtonColors, border: BorderStroke, contentPadding: PaddingValues = SegmentedButtonDefaults.ContentPadding, interactionSource: MutableInteractionSource? = null, icon: @Composable () -> Unit) {
++    constructor(index: Int, count: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier, enabled: Boolean, shape: androidx.compose.ui.graphics.Shape, colors: SegmentedButtonColors, border: BorderStroke, contentPadding: PaddingValues = androidx.compose.foundation.layout.PaddingValues(), interactionSource: MutableInteractionSource? = null, icon: @Composable () -> Unit) {
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Presentation.kt b/SkipUI/src/main/kotlin/skip/ui/Presentation.kt
+index 2d671aa..ba66fb7 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Presentation.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Presentation.kt
+@@ -124 +124 @@ internal fun SheetPresentation(isPresented: Binding<Boolean>, isFullScreen: Bool
+-        ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, sheetMaxWidth = sheetMaxWidth, sheetGesturesEnabled = !interactiveDismissDisabled, containerColor = androidx.compose.ui.graphics.Color.Unspecified, shape = shape, dragHandle = null, contentWindowInsets = { -> WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) }, properties = properties) { ->
++        ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, sheetMaxWidth = sheetMaxWidth, containerColor = androidx.compose.ui.graphics.Color.Unspecified, shape = shape, dragHandle = null, contentWindowInsets = { -> WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) }, properties = properties) { ->
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ProgressView.kt b/SkipUI/src/main/kotlin/skip/ui/ProgressView.kt
+index 91a33b5..a0be96c 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ProgressView.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ProgressView.kt
+@@ -141 +141 @@ class ProgressView: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ScrollView.kt b/SkipUI/src/main/kotlin/skip/ui/ScrollView.kt
+index 8578565..d06b122 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ScrollView.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ScrollView.kt
+@@ -152 +152 @@ class ScrollView: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -183 +183 @@ class ScrollViewProxy: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -207 +207 @@ class ScrollViewReader: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -539 +539 @@ class ViewAlignedScrollTargetBehavior: ScrollTargetBehavior, skip.lib.SwiftProje
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Section.kt b/SkipUI/src/main/kotlin/skip/ui/Section.kt
+index 728699d..5882b10 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Section.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Section.kt
+@@ -113 +113 @@ class Section: View, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Shape.kt b/SkipUI/src/main/kotlin/skip/ui/Shape.kt
+index 7b109c8..1f6863f 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Shape.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Shape.kt
+@@ -422 +422 @@ class Circle: Shape, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -446 +446 @@ class Rectangle: Shape, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -504 +504 @@ class RoundedRectangle: Shape, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -544 +544 @@ class UnevenRoundedRectangle: Shape, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -589 +589 @@ class Capsule: Shape, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -615 +615 @@ class Ellipse: Shape, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -640 +640 @@ class BridgedCustomShape: Shape, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ShapeStyle.kt b/SkipUI/src/main/kotlin/skip/ui/ShapeStyle.kt
+index 3382880..3433c13 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ShapeStyle.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ShapeStyle.kt
+@@ -67 +67 @@ class ForegroundStyle: ShapeStyle, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -107 +107 @@ class BackgroundStyle: ShapeStyle, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -147 +147 @@ class TintShapeStyle: ShapeStyle, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ShareLink.kt b/SkipUI/src/main/kotlin/skip/ui/ShareLink.kt
+index 70a1023..fc46c13 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ShareLink.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ShareLink.kt
+@@ -172 +172 @@ class ShareLink: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Slider.kt b/SkipUI/src/main/kotlin/skip/ui/Slider.kt
+index 3488b9a..ed9277e 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Slider.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Slider.kt
+@@ -99 +99 @@ class Slider: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Spacer.kt b/SkipUI/src/main/kotlin/skip/ui/Spacer.kt
+index 603d7a7..747a920 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Spacer.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Spacer.kt
+@@ -79 +79 @@ class Spacer: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Spring.kt b/SkipUI/src/main/kotlin/skip/ui/Spring.kt
+index d365c19..315dfba 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Spring.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Spring.kt
+@@ -81 +81 @@ class Spring: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/StackLayouts.kt b/SkipUI/src/main/kotlin/skip/ui/StackLayouts.kt
+index 54650c3..c825c9a 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/StackLayouts.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/StackLayouts.kt
+@@ -1137,3 +1137,3 @@ internal sealed class CrossAxisAlignment {
+-
+-@JvmInline
+-internal value class OrientationIndependentConstraints
++// Plain class (not `value`): a value class needs @JvmInline on the JVM but @JvmInline is unavailable
++// on Kotlin/Native; a regular class compiles on both targets from this one shared export.
++internal class OrientationIndependentConstraints
+diff --git a/SkipUI/src/main/kotlin/skip/ui/StateSupport.kt b/SkipUI/src/main/kotlin/skip/ui/StateSupport.kt
+index 4ba3453..0a59305 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/StateSupport.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/StateSupport.kt
+@@ -35 +35 @@ class StateSupport: StateTracker, skip.lib.SwiftProjecting {
+-    private external fun Swift_release(Swift_valueHolder: Long): Long
++    private fun Swift_release(Swift_valueHolder: Long): Long = throw NotImplementedError("Swift interop unused on K/N")
+@@ -53 +53 @@ class StateSupport: StateTracker, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Stepper.kt b/SkipUI/src/main/kotlin/skip/ui/Stepper.kt
+index 1fa1dcb..5b22e94 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Stepper.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Stepper.kt
+@@ -314 +314 @@ class Stepper: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/TabView.kt b/SkipUI/src/main/kotlin/skip/ui/TabView.kt
+index 13a1c8b..d48e023 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/TabView.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/TabView.kt
+@@ -656 +656 @@ class TabView: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -1205 +1205 @@ class Tab: TabContent, Renderable, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -1336 +1336 @@ class TabSection: TabContent, Renderable, MutableStruct, skip.lib.SwiftProjectin
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Table.kt b/SkipUI/src/main/kotlin/skip/ui/Table.kt
+index b626dcf..fe1ac1a 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Table.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Table.kt
+@@ -1,0 +2 @@ package skip.ui
++import java.lang.System
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Text.kt b/SkipUI/src/main/kotlin/skip/ui/Text.kt
+index f555e20..ca187a0 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Text.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Text.kt
+@@ -309 +309 @@ class Text: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -599 +599 @@ internal class _Text: View, Renderable {
+-                androidx.compose.material3.Text(text = annotatedText, modifier = options.modifier, color = options.color, autoSize = options.autoSize, fontSize = options.fontSize, fontStyle = options.fontStyle, fontWeight = options.fontWeight, fontFamily = options.fontFamily, letterSpacing = options.letterSpacing, textDecoration = options.textDecoration, textAlign = options.textAlign, lineHeight = options.lineHeight, overflow = options.overflow, softWrap = options.softWrap, maxLines = options.maxLines, minLines = options.minLines, onTextLayout = onTextLayout, style = options.style)
++                androidx.compose.material3.Text(text = annotatedText, modifier = options.modifier, color = options.color, fontSize = options.fontSize, fontStyle = options.fontStyle, fontWeight = options.fontWeight, fontFamily = options.fontFamily, letterSpacing = options.letterSpacing, textDecoration = options.textDecoration, textAlign = options.textAlign, lineHeight = options.lineHeight, overflow = options.overflow, softWrap = options.softWrap, maxLines = options.maxLines, minLines = options.minLines, onTextLayout = onTextLayout, style = options.style)
+@@ -601 +601 @@ internal class _Text: View, Renderable {
+-                androidx.compose.material3.Text(text = options.text ?: "", modifier = options.modifier, color = options.color, autoSize = options.autoSize, fontSize = options.fontSize, fontStyle = options.fontStyle, fontWeight = options.fontWeight, fontFamily = options.fontFamily, letterSpacing = options.letterSpacing, textDecoration = options.textDecoration, textAlign = options.textAlign, lineHeight = options.lineHeight, overflow = options.overflow, softWrap = options.softWrap, maxLines = options.maxLines, minLines = options.minLines, onTextLayout = options.onTextLayout, style = options.style)
++                androidx.compose.material3.Text(text = options.text ?: "", modifier = options.modifier, color = options.color, fontSize = options.fontSize, fontStyle = options.fontStyle, fontWeight = options.fontWeight, fontFamily = options.fontFamily, letterSpacing = options.letterSpacing, textDecoration = options.textDecoration, textAlign = options.textAlign, lineHeight = options.lineHeight, overflow = options.overflow, softWrap = options.softWrap, maxLines = options.maxLines, minLines = options.minLines, onTextLayout = options.onTextLayout, style = options.style)
+@@ -604 +604 @@ internal class _Text: View, Renderable {
+-            androidx.compose.material3.Text(text = options.text ?: "", modifier = options.modifier, color = options.color, autoSize = options.autoSize, fontSize = options.fontSize, fontStyle = options.fontStyle, fontWeight = options.fontWeight, fontFamily = options.fontFamily, letterSpacing = options.letterSpacing, textDecoration = options.textDecoration, textAlign = options.textAlign, lineHeight = options.lineHeight, overflow = options.overflow, softWrap = options.softWrap, maxLines = options.maxLines, minLines = options.minLines, onTextLayout = options.onTextLayout, style = options.style)
++            androidx.compose.material3.Text(text = options.text ?: "", modifier = options.modifier, color = options.color, fontSize = options.fontSize, fontStyle = options.fontStyle, fontWeight = options.fontWeight, fontFamily = options.fontFamily, letterSpacing = options.letterSpacing, textDecoration = options.textDecoration, textAlign = options.textAlign, lineHeight = options.lineHeight, overflow = options.overflow, softWrap = options.softWrap, maxLines = options.maxLines, minLines = options.minLines, onTextLayout = options.onTextLayout, style = options.style)
+diff --git a/SkipUI/src/main/kotlin/skip/ui/TextEditor.kt b/SkipUI/src/main/kotlin/skip/ui/TextEditor.kt
+index 6cd3197..ab0a96c 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/TextEditor.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/TextEditor.kt
+@@ -56 +56 @@ class TextEditor: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/TextField.kt b/SkipUI/src/main/kotlin/skip/ui/TextField.kt
+index 238b11f..e2ec031 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/TextField.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/TextField.kt
+@@ -189 +189 @@ class TextField: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/TextSelection.kt b/SkipUI/src/main/kotlin/skip/ui/TextSelection.kt
+index f122870..89db6fd 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/TextSelection.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/TextSelection.kt
+@@ -94 +94 @@ class TextSelection: MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Toggle.kt b/SkipUI/src/main/kotlin/skip/ui/Toggle.kt
+index 9e7f556..8b0cc81 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Toggle.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Toggle.kt
+@@ -116 +116 @@ class Toggle: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Toolbar.kt b/SkipUI/src/main/kotlin/skip/ui/Toolbar.kt
+index 60bdc1c..7300844 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Toolbar.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Toolbar.kt
+@@ -89 +89 @@ class ToolbarItem: View, Renderable, CustomizableToolbarContent, MutableStruct,
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -160 +160 @@ class ToolbarItemGroup: CustomizableToolbarContent, View, skip.lib.SwiftProjecti
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -190 +190 @@ class ToolbarTitleMenu: CustomizableToolbarContent, View, Renderable, skip.lib.S
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -224 +224 @@ class ToolbarSpacer: ToolbarContent, CustomizableToolbarContent, View, Renderabl
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/Transition.kt b/SkipUI/src/main/kotlin/skip/ui/Transition.kt
+index 26853c8..73716f0 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/Transition.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/Transition.kt
+@@ -113 +113 @@ class AnyTransition: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -236 +236 @@ class AsymmetricTransition<Insertion, Removal>: Transition, MutableStruct, skip.
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -285 +285 @@ class CombinedTransition: Transition, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -341 +341 @@ class PushTransition: Transition, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -405 +405 @@ class ScaleTransition: Transition, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -440 +440 @@ class SlideTransition: Transition, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -462 +462 @@ class IdentityTransition: Transition, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -518 +518 @@ class MoveTransition: Transition, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -576 +576 @@ class OffsetTransition: Transition, MutableStruct, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -593 +593 @@ class OpacityTransition: Transition, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/UIApplication.kt b/SkipUI/src/main/kotlin/skip/ui/UIApplication.kt
+index 8c3f327..f404dff 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/UIApplication.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/UIApplication.kt
+@@ -408 +408 @@ open class UIApplication: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/UIColor.kt b/SkipUI/src/main/kotlin/skip/ui/UIColor.kt
+index babdca2..001e884 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/UIColor.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/UIColor.kt
+@@ -24 +24 @@ class UIColor: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/UIImage.kt b/SkipUI/src/main/kotlin/skip/ui/UIImage.kt
+index c462020..abda417 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/UIImage.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/UIImage.kt
+@@ -326 +326 @@ open class UIImage: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/UIPasteboard.kt b/SkipUI/src/main/kotlin/skip/ui/UIPasteboard.kt
+index 1d1ba23..86a52f2 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/UIPasteboard.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/UIPasteboard.kt
+@@ -13 +13 @@ import android.content.ClipboardManager
+-import android.content.Context.CLIPBOARD_SERVICE
++import android.content.Context
+@@ -20 +20 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-        (context.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager).sref()?.let { clipboardManager ->
++        (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager).sref()?.let { clipboardManager ->
+@@ -143 +143 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-            val clipboardManager_0 = (context.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager).sref()
++            val clipboardManager_0 = (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager).sref()
+@@ -168 +168 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-            val clipboardManager_1 = (context.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager).sref()
++            val clipboardManager_1 = (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager).sref()
+@@ -192 +192 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-            val clipboardManager_2 = (context.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager).sref()
++            val clipboardManager_2 = (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager).sref()
+@@ -210 +210 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-            val clipboardManager_3 = (context.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager).sref()
++            val clipboardManager_3 = (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager).sref()
+@@ -245 +245 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-            val clipboardManager_4 = (context.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager).sref()
++            val clipboardManager_4 = (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager).sref()
+@@ -302 +302 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-            val clipboardManager_5 = (context.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager).sref()
++            val clipboardManager_5 = (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager).sref()
+@@ -605 +605 @@ open class UIPasteboard: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/UserNotifications.kt b/SkipUI/src/main/kotlin/skip/ui/UserNotifications.kt
+index b2ce91e..e5c5baa 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/UserNotifications.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/UserNotifications.kt
+@@ -346 +346 @@ class UNUserNotificationCenter: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -432 +432 @@ class UNNotification: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -455 +455 @@ class UNNotificationRequest: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -482 +482 @@ class UNNotificationResponse: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -523 +523 @@ class UNNotificationPresentationOptions: OptionSet<UNNotificationPresentationOpt
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -596 +596 @@ open class UNNotificationContent: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -707 +707 @@ class UNNotificationSound: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -770 +770 @@ open class UNNotificationAttachment: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -795 +795 @@ open class UNNotificationTrigger: skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -819 +819 @@ class UNTimeIntervalNotificationTrigger: UNNotificationTrigger {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -852 +852 @@ class UNCalendarNotificationTrigger: UNNotificationTrigger {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -889 +889 @@ enum class UNAuthorizationStatus(override val rawValue: Int, @Suppress("UNUSED_P
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+@@ -1064 +1064 @@ open class UNNotificationSettings: java.lang.Object, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/UserNotificationsDelegateSupport.kt b/SkipUI/src/main/kotlin/skip/ui/UserNotificationsDelegateSupport.kt
+index a2aee83..736c36c 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/UserNotificationsDelegateSupport.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/UserNotificationsDelegateSupport.kt
+@@ -45 +45 @@ class UserNotificationCenterDelegateSupport: UNUserNotificationCenterDelegate, s
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/VStack.kt b/SkipUI/src/main/kotlin/skip/ui/VStack.kt
+index 6dcf361..49c76e1 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/VStack.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/VStack.kt
+@@ -243 +243 @@ class VStack: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ViewThatFits.kt b/SkipUI/src/main/kotlin/skip/ui/ViewThatFits.kt
+index 4809367..6592d05 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ViewThatFits.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ViewThatFits.kt
+@@ -81 +81 @@ class ViewThatFits: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
+diff --git a/SkipUI/src/main/kotlin/skip/ui/ZStack.kt b/SkipUI/src/main/kotlin/skip/ui/ZStack.kt
+index 5ef688e..a393b5c 100644
+--- a/SkipUI/src/main/kotlin/skip/ui/ZStack.kt
++++ b/SkipUI/src/main/kotlin/skip/ui/ZStack.kt
+@@ -140 +140 @@ class ZStack: View, Renderable, skip.lib.SwiftProjecting {
+-    private external fun Swift_projectionImpl(options: Int): () -> Any
++    private fun Swift_projectionImpl(options: Int): () -> Any = throw NotImplementedError("Swift interop unused on K/N")
