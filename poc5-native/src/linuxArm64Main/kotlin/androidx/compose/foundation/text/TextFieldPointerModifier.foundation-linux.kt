@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+// Modifications Copyright 2026 SkeletonGamer, licensed under the Apache License, Version 2.0.
+// Changed from the original: copied from the Compose macOS/native source set and adapted for the
+// Kotlin/Native Linux (linuxArm64) target (renamed; Apple-only calls removed where present).
+
 package androidx.compose.foundation.text
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
