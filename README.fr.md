@@ -38,10 +38,8 @@ Chaque POC a son document de findings (anglais + français), le vrai livrable.
 | 5 | Le **vrai** compose.ui / foundation / material3 en K/N Linux | TERMINÉ : rendu + interactif, 35 Mo / 124 Mo, sans JVM | [`FINDINGS-POC5.fr.md`](./FINDINGS-POC5.fr.md) |
 | 6 | Dé-Android-iser le SkipUI transpilé, sur CMP Desktop (JVM) puis Kotlin/Native Linux | FAIT : toute la pile Skip compile vert ET l'écran SwiftUI transpilé rend en K/N Linux, sans JVM (37 Mo / 122 Mo contre 137/224 JVM) | [`FINDINGS-POC6.fr.md`](./FINDINGS-POC6.fr.md) |
 
-> Des scripts d'aide à la reconstruction et au relancement sont dans [`scripts/`](./scripts/), un par POC
-> (1 à 6) : `scripts/fetch-deps.sh` pour les dépendances (une fois), `scripts/run-native.sh <poc>` pour les
-> POC natifs sans JVM (3 à 6), `scripts/run-jvm.sh <poc>` pour les POC JVM (1 et 6), `scripts/run-poc2-screen.sh`
-> pour le POC 2 (écran réel). La matrice complète est dans [`scripts/README.md`](./scripts/README.md).
+> Chaque probe a un runner en une commande, et `scripts/setup.sh` prépare un clone frais. Voir la section
+> [Reproduire](#reproduire) plus bas, ou [`scripts/README.md`](./scripts/README.md) pour la matrice complète.
 
 ## Comment fonctionne le POC 5
 
@@ -62,34 +60,6 @@ Deux briques, sans forker Compose :
 Le seul mur de plateforme rencontré à l'exécution : `compose.ui#postDelayed` (utilisé par le debounce de
 `RectManager`), qui s'exécute sur `Dispatchers.Main`, absent en K/N Linux. Il est remplacé par un
 ordonnanceur drainé par la boucle de frames, qui exécute les callbacks sur le thread compose.
-
-## Reproduire (POC 5)
-
-Prérequis : un JDK 21 (compilation uniquement ; le binaire produit n'a pas de JVM), la toolchain Kotlin/Native
-(téléchargée par Gradle à la première exécution), Docker pour l'exécution Linux arm64.
-
-```bash
-# 1. Récupérer un checkout des sources Compose Multiplatform (les versions visent la branche jb-main).
-git clone --branch jb-main --depth 1 \
-    https://github.com/JetBrains/compose-multiplatform-core .cmc
-#    (ou cloner ailleurs et passer -PcmcRoot=/chemin/abs / définir CMC_ROOT)
-
-# 2. Compiler toute la pile compose.ui + foundation + material3 pour linuxArm64 K/N (produit un klib).
-cd poc5-native && gradle compileKotlinLinuxArm64
-
-# 3. Cross-compiler et lier le médiateur ui-glfw en exécutable linuxArm64 (depuis macOS ou Linux).
-gradle linkReleaseExecutableLinuxArm64   # -> build/bin/linuxArm64/releaseExecutable/poc5-native.kexe
-
-# 4. L'exécuter dans un conteneur Linux arm64 sous Xvfb (GL software) ; les PNG arrivent dans ./out.
-docker build --platform linux/arm64 -f ../scripts/docker/Dockerfile.run -t poc-native-run ../scripts/docker
-docker run --rm --platform linux/arm64 \
-    -v "$PWD/build/bin/linuxArm64/releaseExecutable/poc5-native.kexe:/app/poc5-native.kexe:ro" \
-    -v "$PWD/out:/out" poc-native-run
-```
-
-Note : les klibs K/N Linux publiés utilisés ici sont figés sur des versions de tête (alpha/beta/rc),
-car c'est le seul endroit où les variantes linuxArm64 existent pendant le rollout. Elles peuvent bouger
-ou disparaître de Maven au fil du rollout ; les findings notent les versions exactes utilisées.
 
 ## Comment fonctionne le POC 6 (la question du transpileur Skip, rouverte)
 
@@ -141,38 +111,29 @@ desktop, un `java.net.URI` RFC 3986, le temps réel via posix, `BigInteger` sur 
 findings détaillent la trajectoire complète (2103 -> 0 pour la fondation, 1500 -> 0 pour l'UI) et les ~10
 correctifs d'exécution jusqu'au premier rendu.
 
-## Reproduire (POC 6)
+## Reproduire
 
-`poc6-skip-cmp/` ne contient que du travail original : les fichiers de build et les ~24 fichiers de cales.
-Il **n'inclut pas** la sortie Kotlin transpilée de Skip, générée depuis une app SwiftUI par la chaîne
-d'outils Skip et qu'il ne nous appartient pas de redistribuer. Pour reproduire :
+`./export` (la sortie transpilée de Skip) et `./.cmc` (le checkout des sources Compose) ne sont pas commités ;
+`scripts/setup.sh` les régénère pour un clone frais : il récupère les dépendances, lance `skip export` sur
+l'app witness, puis la dé-Android-ise avec `scripts/patch-export.sh`. Ensuite, lancer n'importe quelle probe :
 
-```bash
-# 1. Installer la chaîne d'outils Skip (https://skip.dev) et faire `skip export` d'une app SwiftUI témoin
-#    triviale. Placer les SkipLib/SkipFoundation/SkipModel/SkipUI transpilés + votre ContentView à
-#    ../export/Witness-project/Witness (le chemin attendu par build.gradle.kts).
-# 2. Appliquer les ~10 patchs d'une ligne de décalage de versions à la sortie transpilée (voir les
-#    findings du POC 6) : retirer les arguments propres à Jetpack (autoSize, sheetGesturesEnabled),
-#    FontFamily.Default pour FontFamily(Typeface), SegmentedButtonDefaults.ContentPadding ->
-#    PaddingValues(), et neutraliser les chaînes d'images coil-Android (inutiles sur un témoin desktop).
-# 3. Fournir android.jar (n'importe quelle plateforme Android SDK récente) au chemin attendu.
-cd poc6-skip-cmp && gradle renderPng   # -> out/poc6-skipui-render.png
-```
+| Probe | Commande |
+|-------|----------|
+| POC 1 : sortie Skip sur CMP Desktop (JVM) | `scripts/run-jvm.sh desktop-witness` |
+| POC 2 : Compose-first, sur écran réel | `scripts/run-poc2-screen.sh` |
+| POC 3 : Skia + runtime + GLFW, natif | `scripts/run-native.sh poc3-native` |
+| POC 4 : ui-glfw minimal, natif | `scripts/run-native.sh poc4-native` |
+| POC 5 : vrai material3, natif | `scripts/run-native.sh poc5-native` |
+| POC 6 : SkipUI transpilé, natif (sans JVM) | `scripts/run-native.sh poc6-native` |
+| POC 6 : SkipUI transpilé sur CMP Desktop (JVM) | `scripts/run-jvm.sh poc6-skip-cmp` |
 
-La compilation `poc6-native/` (K/N Linux, sans JVM) suit la même idée, par-dessus la pile Compose compilée
-depuis les sources du POC 5. Elle est autonome (fichiers de build, `main.kt`, les ~116 fichiers de cales, et
-les mêmes fichiers `actual` Linux de la pile Compose que le POC 5, chacun gardant son en-tête Apache-2.0) ;
-elle n'inclut pas la sortie transpilée de Skip. Pour reproduire, en plus :
+Les prérequis (un JDK, Docker, la chaîne d'outils Skip), les overrides et la matrice complète sont dans
+[`scripts/README.md`](./scripts/README.md).
 
-```bash
-# 4. Récupérer le checkout des sources compose comme au POC 5 (branche jb-main) dans ./.cmc (ou -PcmcRoot=/chemin/abs).
-# 5. Lier et exécuter dans un conteneur Linux arm64 sous Xvfb (comme au POC 5).
-cd poc6-native && gradle linkReleaseExecutableLinuxArm64
-docker build --platform linux/arm64 -f ../scripts/docker/Dockerfile.run -t poc-native-run ../scripts/docker
-docker run --rm --platform linux/arm64 \
-    -v "$PWD/build/bin/linuxArm64/releaseExecutable/poc6-native.kexe:/app/poc6-native.kexe:ro" \
-    -v "$PWD/out:/out" poc-native-run   # -> out/poc6-skipui-native.png
-```
+Deux points à signaler : les klibs K/N Linux publiés que consomment les builds natifs sont figés sur des
+versions de tête (alpha/beta/rc), car c'est le seul endroit où les variantes `linuxArm64` existent pendant
+le rollout (les findings notent les versions exactes) ; et la sortie Kotlin transpilée de Skip n'est pas à
+nous de redistribuer, d'où le fait que `setup.sh` la régénère localement plutôt que le dépôt la livre.
 
 ## Statut et réserves
 
@@ -204,4 +165,4 @@ copiés (et quelques-uns patchés) des projets AOSP / JetBrains Compose sous Apa
 `poc5-native/src/linuxArm64Main/` et (le même jeu) `poc6-native/src/linuxArm64Main/`, chacun conservant son
 en-tête d'origine. Le fichier `NOTICE` consigne l'attribution et les modifications. Les cales de
 `poc6-skip-cmp/` et `poc6-native/` sont du travail original ; la sortie transpilée de Skip n'est pas incluse
-dans ce repo (voir « Reproduire (POC 6) »). Tout le reste est du travail original.
+dans ce repo (voir « Reproduire »). Tout le reste est du travail original.
