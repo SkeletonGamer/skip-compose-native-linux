@@ -41,7 +41,16 @@ Chaque POC a son document de findings (anglais + français), le vrai livrable.
 > Chaque probe a un runner en une commande, et `scripts/setup.sh` prépare un clone frais. Voir la section
 > [Reproduire](#reproduire) plus bas, ou [`scripts/README.md`](./scripts/README.md) pour la matrice complète.
 
-## Comment fonctionne le POC 5
+## Comment ça marche
+
+Le repo suit deux fils, aboutissant tous deux en Kotlin/Native Linux. Compose sur K/N Linux : le POC 2 a
+constaté que Compose Multiplatform Desktop est JVM-only, donc le POC 3 a prouvé que la fondation existe
+(skiko + runtime + fenêtrage GLFW), le POC 4 un `ui-glfw` minimal écrit à la main, et le POC 5 le vrai
+`compose.ui` / `foundation` / `material3`. Le transpileur Skip : le POC 1 l'avait clos en NO-GO, le POC 6 le
+rouvre et dé-Android-ise le SkipUI transpilé. Voici comment fonctionnent les deux aboutissements ; les
+tremplins (POC 1 à 4) sont dans le tableau ci-dessus, chacun avec ses findings.
+
+### L'UI Compose en Kotlin/Native Linux (POC 5)
 
 Deux briques, sans forker Compose :
 
@@ -61,7 +70,7 @@ Le seul mur de plateforme rencontré à l'exécution : `compose.ui#postDelayed` 
 `RectManager`), qui s'exécute sur `Dispatchers.Main`, absent en K/N Linux. Il est remplacé par un
 ordonnanceur drainé par la boucle de frames, qui exécute les callbacks sur le thread compose.
 
-## Comment fonctionne le POC 6 (la question du transpileur Skip, rouverte)
+### La question du transpileur Skip, rouverte (POC 6)
 
 Le POC 6 rouvre la seule question que le POC 1 avait close en NO-GO : le SkipUI/SkipFoundation transpilé de
 Skip est-il « diffusément couplé à Android », ou le couplage est-il borné et remplaçable par des cales ? Il
@@ -89,7 +98,7 @@ par le vrai SkipUI sur Compose Multiplatform Desktop, hors écran via `ImageComp
 cadrage « diffus / sans espoir » du POC 1 ne tient pas ; le couplage est un ensemble dénombrable et
 localisé de cales.*
 
-### POC 6 en Kotlin/Native Linux, sans JVM (`poc6-native/`)
+#### POC 6 en Kotlin/Native Linux, sans JVM (`poc6-native/`)
 
 La même pile Skip transpilée a ensuite été poussée jusqu'en K/N Linux, par-dessus la pile Compose compilée
 depuis les sources du POC 5. L'ensemble (SkipLib + SkipFoundation + SkipModel + SkipUI + l'app Witness

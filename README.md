@@ -41,7 +41,16 @@ Each POC has its own findings document (English + French), kept as the real deli
 > Every probe has a one-command runner, and `scripts/setup.sh` prepares a fresh clone. See the
 > [Reproduce](#reproduce) section below, or [`scripts/README.md`](./scripts/README.md) for the full matrix.
 
-## How POC 5 works
+## How it works
+
+The repo runs two threads, both landing on Kotlin/Native Linux. Compose on K/N Linux: POC 2 found Compose
+Multiplatform Desktop is JVM-only, so POC 3 proved the foundation exists (skiko + runtime + GLFW windowing),
+POC 4 a minimal hand-written `ui-glfw`, and POC 5 the real `compose.ui` / `foundation` / `material3`. The
+Skip transpiler: POC 1 closed it as NO-GO, POC 6 reopened it and de-Android-ified the transpiled SkipUI. Here
+is how the two headline results work; the stepping stones (POC 1 to 4) are in the table above, each with its
+findings.
+
+### Compose UI on Kotlin/Native Linux (POC 5)
 
 Two pieces, no fork of Compose required:
 
@@ -61,7 +70,7 @@ The only runtime platform wall hit was `compose.ui#postDelayed` (used by `RectMa
 which launches on `Dispatchers.Main`, absent on K/N Linux. It is replaced by a frame-loop-drained
 scheduler that runs the callbacks on the compose thread.
 
-## How POC 6 works (the Skip transpiler question, reopened)
+### The Skip transpiler question, reopened (POC 6)
 
 POC 6 reopens the one question POC 1 closed as NO-GO: is Skip's SwiftUI-transpiled SkipUI/SkipFoundation
 "diffusely coupled to Android", or is the coupling bounded and shimmable? It answers it on two targets:
@@ -87,7 +96,7 @@ The error count converges monotonically to zero (1348 -> 535 -> 347 -> 136 -> 10
 the real SkipUI on Compose Multiplatform Desktop, offscreen via `ImageComposeScene`. The verdict: POC 1's
 "diffuse / hopeless" framing does not hold; the coupling is a countable, localized set of shims.*
 
-### POC 6 on Kotlin/Native Linux, no JVM (`poc6-native/`)
+#### POC 6 on Kotlin/Native Linux, no JVM (`poc6-native/`)
 
 The same transpiled Skip stack was then pushed all the way to K/N Linux, on top of the from-source compose
 stack of POC 5. The whole thing (SkipLib + SkipFoundation + SkipModel + SkipUI + the transpiled Witness app,
