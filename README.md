@@ -156,6 +156,7 @@ redistribute, which is why `setup.sh` regenerates it locally instead of the repo
 - compose-multiplatform-core: https://github.com/JetBrains/compose-multiplatform-core
 - skiko (Skia for Kotlin): https://github.com/JetBrains/skiko
 - GLFW: https://www.glfw.org/
+- Skip (SwiftUI to Kotlin/Compose transpiler): https://skip.dev
 
 The skiko Kotlin/Native Linux arm64 support this project rides on:
 
@@ -163,6 +164,10 @@ The skiko Kotlin/Native Linux arm64 support this project rides on:
 - EGL on linuxArm64, tracked by [SKIKO-918](https://youtrack.jetbrains.com/issue/SKIKO-918) / [skiko#918](https://github.com/JetBrains/skiko/issues/918) "Add EGL support" (**Fixed**): skiko now supports EGL on linuxArm64 via `makeGL()`. Landed through [skia-pack#68](https://github.com/JetBrains/skia-pack/pull/68) (merged Oct 2025) and [skiko#1052](https://github.com/JetBrains/skiko/pull/1052) (merged Jan 2026).
 - [SKIKO-611](https://youtrack.jetbrains.com/issue/SKIKO-611) / [skiko#611](https://github.com/JetBrains/skiko/issues/611) "Support Kotlin/Native on Windows and Linux (x86_64)" (**open** on YouTrack): tracks the x86_64 desktop targets; per the thread, native desktop Linux/Windows is community-driven, not JetBrains-prioritized. The arm64 target this project uses came separately via skiko#1051.
 - [SKIKO-863](https://youtrack.jetbrains.com/issue/SKIKO-863) / [skiko#863](https://github.com/JetBrains/skiko/issues/863) "Support for Linux DRM" (**open**): direct KMS/DRM rendering with no window manager, relevant to headless/embedded devices. Prior art in the thread: Jake Wharton's [composeui-lightswitch](https://github.com/JakeWharton/composeui-lightswitch) got Compose running on DRM.
+
+The Skip half of this repo (POC 1 and POC 6) started from the Skip maintainers' own suggestion:
+
+- [skiptools discussion #163](https://github.com/orgs/skiptools/discussions/163) "Why not Compose Multiplatform?": marcprux (Skip maintainer) suggested exporting a Skip project with `skip export` and seeing how many changes it takes to run on another Compose Multiplatform target. This repo is that experiment.
 
 ## License
 

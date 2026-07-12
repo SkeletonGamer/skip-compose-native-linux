@@ -159,6 +159,7 @@ nous de redistribuer, d'où le fait que `setup.sh` la régénère localement plu
 - compose-multiplatform-core : https://github.com/JetBrains/compose-multiplatform-core
 - skiko (Skia for Kotlin) : https://github.com/JetBrains/skiko
 - GLFW : https://www.glfw.org/
+- Skip (transpileur SwiftUI vers Kotlin/Compose) : https://skip.dev
 
 La prise en charge skiko Kotlin/Native Linux arm64 sur laquelle ce projet s'appuie :
 
@@ -166,6 +167,10 @@ La prise en charge skiko Kotlin/Native Linux arm64 sur laquelle ce projet s'appu
 - EGL sur linuxArm64, suivi par [SKIKO-918](https://youtrack.jetbrains.com/issue/SKIKO-918) / [skiko#918](https://github.com/JetBrains/skiko/issues/918) « Add EGL support » (**Fixed**) : skiko prend désormais en charge EGL sur linuxArm64 via `makeGL()`. Livré par [skia-pack#68](https://github.com/JetBrains/skia-pack/pull/68) (mergé oct. 2025) et [skiko#1052](https://github.com/JetBrains/skiko/pull/1052) (mergé janv. 2026).
 - [SKIKO-611](https://youtrack.jetbrains.com/issue/SKIKO-611) / [skiko#611](https://github.com/JetBrains/skiko/issues/611) « Support Kotlin/Native on Windows and Linux (x86_64) » (**ouvert** sur YouTrack) : suit les cibles desktop x86_64 ; d'après le fil, le desktop Linux/Windows natif est community-driven, non priorisé par JetBrains. La cible arm64 utilisée ici est venue séparément via skiko#1051.
 - [SKIKO-863](https://youtrack.jetbrains.com/issue/SKIKO-863) / [skiko#863](https://github.com/JetBrains/skiko/issues/863) « Support for Linux DRM » (**ouvert**) : rendu direct KMS/DRM sans window manager, pertinent pour un appareil embarqué/headless. Prior art dans le fil : `composeui-lightswitch` de Jake Wharton, qui a fait tourner Compose sur DRM.
+
+La moitié Skip de ce repo (POC 1 et POC 6) part d'une suggestion des mainteneurs de Skip eux-mêmes :
+
+- [discussion skiptools #163](https://github.com/orgs/skiptools/discussions/163) « Why not Compose Multiplatform? » : marcprux (mainteneur de Skip) suggérait d'exporter un projet Skip avec `skip export` et de regarder combien de changements il faut pour le faire tourner sur une autre cible Compose Multiplatform. Ce repo est cette expérience.
 
 ## Licence
 
