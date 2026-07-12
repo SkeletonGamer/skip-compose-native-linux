@@ -5,7 +5,7 @@ on **Kotlin/Native Linux, without a JVM**.
 
 > English canonical (this file). French copy: [`README.fr.md`](./README.fr.md).
 
-A series of six proofs of concept into the UI layer for a constrained Linux device.
+A series of six research probes into the UI layer for a constrained Linux device.
 They answer one question end to end: *can Jetpack Compose / Compose Multiplatform render on a
 Linux device without paying the JVM cost, and at what price?* The answer, measured on Linux arm64:
 **yes**, a real `MaterialTheme` + `Button` + `Text` renders and reacts on **Kotlin/Native Linux with
@@ -178,7 +178,7 @@ docker run --rm --platform linux/arm64 \
 - The cost of this approach is **maintaining an out-of-JetBrains `ui-glfw` backend** plus a handful of
   Linux `actual`s, for as long as JetBrains has not published the UI layer's K/N Linux artifacts. Once
   they do, the extract-and-compile scaffolding collapses to just the mediator.
-- These are **throwaway POCs**, not a product. Read the findings for the honest cost accounting.
+- These are **exploratory research probes**, not production-hardened. Read the findings for the honest cost accounting.
 
 ## References
 

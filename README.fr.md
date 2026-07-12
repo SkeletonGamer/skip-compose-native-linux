@@ -5,7 +5,7 @@ Faire tourner de l'UI déclarative, **Compose Multiplatform** et **SwiftUI trans
 
 > Version anglaise canonique : [`README.md`](./README.md). Ce fichier en est la copie française.
 
-Une série de six POC sur la couche UI d'un appareil Linux contraint. Ils répondent de
+Une série de six sondes de recherche sur la couche UI d'un appareil Linux contraint. Elles répondent de
 bout en bout à une question : *Jetpack Compose / Compose Multiplatform peut-il rendre sur un appareil
 Linux sans payer le coût de la JVM, et à quel prix ?* La réponse, mesurée sur Linux arm64 : **oui**, un
 vrai `MaterialTheme` + `Button` + `Text` rend et réagit en **Kotlin/Native Linux sans JVM**, dans un
@@ -181,7 +181,7 @@ docker run --rm --platform linux/arm64 \
 - Le coût de cette approche est de **maintenir un backend `ui-glfw` hors-JetBrains** plus une poignée
   d'`actual` Linux, tant que JetBrains n'a pas publié les artefacts K/N Linux de la couche UI. Une fois
   publiés, l'échafaudage extract-and-compile se réduit au seul médiateur.
-- Ce sont des **POC jetables**, pas un produit. Lire les findings pour le vrai bilan de coût.
+- Ce sont des **sondes de recherche exploratoires**, pas du code durci pour la production. Lire les findings pour le vrai bilan de coût.
 
 ## Références
 
