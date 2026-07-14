@@ -469,14 +469,169 @@ de date US **et** une semaine commençant le lundi, ce qui est contradictoire.
   données CLDR minimales (aucune dépendance, couverture limitée).
 - **IME** (`zwp_text_input_v3` ou IBus/Fcitx via D-Bus). Sans lui, pas de clavier virtuel ni de saisie CJK.
   Non vérifiable dans ce harnais : il faut un vrai compositeur ou un démon de méthode de saisie.
-- **Accessibilité** (AT-SPI2 via D-Bus), presse-papiers riche (types MIME) et glisser-déposer. À noter : le
-  backend desktop JVM **n'a pas non plus d'accessibilité Linux fonctionnelle**
-  (`Accessibility.desktop.kt` sort immédiatement sur tout OS autre que macOS et Windows) : c'est donc une
-  occasion de faire mieux, pas une régression.
+- **Accessibilité** (AT-SPI2 via D-Bus), presse-papiers riche (types MIME) et glisser-déposer. Il vaut la
+  peine de savoir ce que le backend desktop JVM fait réellement sur Linux, puisqu'il donne la référence :
+  l'arbre d'accessibilité **est** bien construit et exposé (`accessibleContextProvider` est fourni au
+  SkiaLayer quel que soit l'OS), mais **la notification de focus ne fait rien sur Linux** :
+  `requestFocusOnAccessible` ne câble que Windows (Java Access Bridge) et macOS (`CAccessible`), et sort
+  immédiatement sur tout le reste. Un lecteur d'écran pourrait donc lire l'arbre, mais ne serait jamais
+  averti de ce qui prend le focus. Partiel, pas absent.
 
 ### Temps passé
 
 - Jalon 7 (cette session) : ~2 h (inventaire, Lot 1, Lot 2, harnais de test d'entrées X11).
+
+## Jalon 8 : vraie localisation (ICU au runtime), et des tests qui cliquent par nom
+
+Le Jalon 7 laissait les noms de mois et de jours en anglais : les données CLDR ne se déduisent pas, elles
+se lisent. Les obtenir passe par ICU4C, et ICU vient avec un piège.
+
+### Pourquoi ICU est chargé par dlopen, et non lié
+
+ICU renomme chacun de ses symboles exportés avec sa version majeure. La bibliothèque exporte
+`udat_open_72`, jamais `udat_open` (les headers réécrivent l'appel via une macro). **Un binaire lié contre
+ICU 72 ne démarre donc pas sur une distribution qui livre ICU 74.** Pour un binaire destiné à être
+distribué, c'est inacceptable.
+
+Le chargeur (`icu/IcuLoader.kt`) fait donc un `dlopen` de la bibliothèque, découvre quelle version est
+réellement installée, et résout les symboles suffixés par `dlsym`. Les liaisons (`icu/IcuApi.kt`) couvrent
+le formatage des dates, le calendrier, l'orientation de la locale et la casse. Chaque appel retombe sur le
+comportement précédent quand ICU est absent : l'app tourne sans lui.
+
+Le test le vérifie directement : **le binaire ne porte aucune entrée ICU dans sa liste `NEEDED`**. Il
+démarre face à ICU 72, ICU 74, ou aucune.
+
+### Ce que la locale pilote réellement maintenant
+
+| | Avant | Après |
+|---|---|---|
+| Noms de mois/jours | anglais, toujours | `14 juillet 2026`, semaine commençant `lundi` (fr_FR) |
+| Ordre des champs de date | table de régions | motif CLDR via `udatpg_getBestPattern` |
+| Premier jour de la semaine | table de régions | `ucal_getAttribute` |
+| 12h/24h | table de régions | déduit du motif horaire de la locale |
+| RTL | table tenue à la main | `uloc_getCharacterOrientation` (la table devient le repli) |
+| Casse | locale racine (turc `i` -> `I`, faux) | selon la locale (`u_strToUpper`) |
+
+### Les tests cliquent par nom, pas par pixel
+
+Les tests d'entrées pilotent l'app avec de vrais événements X11 : il leur faut donc des coordonnées écran.
+Les coder en dur cassait en silence : ajouter deux lignes à l'UI décalait chaque widget d'environ 45 px, les
+clics atterrissaient sur des libellés, et les tests rapportaient quand même PASS, parce que les événements
+atteignaient bien Compose, simplement pas le widget.
+
+Le mediator parcourt désormais l'arbre sémantique de Compose, celui que `Modifier.testTag()` alimente, et
+exporte chaque tag avec ses bornes réelles (`testsupport/SemanticsExport.kt`). Les tests visent les tags.
+C'est le même arbre qu'un pont d'accessibilité AT-SPI consommerait : ce n'est donc pas de la plomberie
+jetable.
+
+### Cinq bugs trouvés par les tests, dont trois faisaient passer des tests à tort
+
+- **`LD_LIBRARY_PATH=/nonexistent` ne cache pas une bibliothèque à `dlopen`**, qui cherche de toute façon
+  dans les chemins système. Le test « sans ICU » passait alors qu'ICU était chargé tout du long.
+- **Supprimer libicu casse mesa** : ses drivers DRI tirent ICU via libxml2, donc la fenêtre ne s'ouvre plus
+  et l'app meurt avant d'atteindre le moindre code ICU. Sur une machine Linux qui rend en GL, ICU est
+  toujours présent. « Aucune ICU » n'est pas un scénario réel ; le vrai bénéfice est l'indépendance à la
+  *version* d'ICU, et c'est ce que le test vérifie désormais.
+- **`python3-minimal` est livré sans le module `json`.** La lecture du dump de tags échouait en silence, et
+  tous les clics partaient au centre de l'écran. Le dump est maintenant une simple ligne `tag x y w h`, lue
+  avec awk.
+- Un `y` seul dans un motif était traité comme deux chiffres (`26` au lieu de `2026`). En CLDR, `yy` donne
+  deux chiffres ; `y` donne l'année complète.
+- Le repli sans ICU ne réordonnait pas les champs du skeleton, ce qui produisait `26 July 14`.
+
+### Ce qui manque encore
+
+- **IME** (`zwp_text_input_v3`, ou IBus/Fcitx via D-Bus). Pas de clavier virtuel, pas de saisie CJK. Non
+  vérifiable dans ce harnais : il faut un vrai compositeur ou un démon de méthode de saisie.
+- **Accessibilité** (AT-SPI2 via D-Bus). L'arbre sémantique est désormais exporté, ce qui en constitue la
+  source. Pour référence, le backend desktop JVM n'est que partiellement là sur Linux : il construit et
+  expose l'arbre d'accessibilité, mais ne notifie jamais les changements de focus (cf. Jalon 7).
+- **Presse-papiers riche** (types MIME au-delà du texte brut) et **glisser-déposer**.
+
+### Temps passé
+
+- Jalon 8 (cette session) : ~1 h 30 (chargeur + liaisons ICU, export sémantique, trois suites de tests).
+
+## Jalon 9 : Wayland natif, dans le même binaire que X11
+
+Tous les Jalons précédents tournaient sur X11. Ça ne suffit plus : **Budgie 10.10 est passé à Wayland
+(labwc, wlroots) et Ubuntu Budgie 26.04 ne livre plus aucune session X11**. Un binaire X11-only n'y
+tournerait qu'à travers XWayland, en mode dégradé. Supporter GNOME et KDE, en Wayland comme en X11, est une
+exigence dure.
+
+### Le blocage était une version de dépendance, pas du code
+
+La pile était sur **GLFW 3.3.8**, qui choisit son backend **à la compilation** : Debian livre `libglfw3`
+(X11) et `libglfw3-wayland` comme deux paquets incompatibles. Un binaire 3.3 est X11-only, point.
+
+**GLFW 3.4 sélectionne le backend à l'exécution** (`glfwGetPlatform`, `glfwPlatformSupported`) et le charge
+par `dlopen` : GLFW lui-même ne lie donc ni X11 ni Wayland. Debian trixie livre la 3.4, et marque
+`libglfw3-wayland` comme paquet *transitionnel* : une seule bibliothèque, les deux backends.
+
+### Le binaire tirait quand même X11, via libGL
+
+Bumper GLFW ne suffisait pas, et la première version de ce Jalon affirmait le contraire. `ldd` sur le
+binaire montrait **`libX11.so.6`**, et elle ne venait pas de GLFW : elle venait de **`libGL`**. Le GL desktop
+embarque GLX, qui est X11 par construction, donc `-lGL` tire libX11 derrière lui. Sur un système Wayland pur
+sans libX11, le binaire n'aurait pas démarré, ce qui est précisément le cas que ce Jalon existe pour couvrir.
+
+Cette dépendance s'est avérée supprimable. L'app ne référence **aucun symbole GLX** : elle résout GL via EGL
+(`eglGetCurrentDisplay`, `eglGetProcAddress`), et les **105** symboles `gl*` dont elle a besoin sont tous
+fournis par `libGLESv2`. Lier `-lGLESv2` au lieu de `-lGL` fait disparaître libX11 :
+
+    avant : libglfw.so.3, libGL.so.1, libX11.so.6, ...
+    après : libglfw.so.3, libGLESv2.so.2, libGLdispatch.so.0     (ni libX11, ni libwayland)
+
+Les deux suites restent vertes après le changement. Le binaire n'a donc désormais **aucune dépendance au
+serveur d'affichage au moment du link** : il choisit X11 ou Wayland à l'exécution, et n'a besoin ni de l'un
+ni de l'autre pour démarrer.
+
+Ce Jalon est donc un bump de dépendance (bookworm -> trixie) plus un changement de linker plus un harnais de
+test. Aucun code de plateforme n'a été écrit.
+
+### Ce qui est prouvé
+
+| | |
+|---|---|
+| Backend GLFW choisi à l'exécution | **Wayland**, avec **aucun serveur X présent** (`DISPLAY` non défini) |
+| Les deux backends dans un seul binaire | `wayland supported = true, x11 supported = true` |
+| Rendu | surface GL skiko sur Wayland (chemin EGL), frames dessinées |
+| Clavier | de vrais événements Wayland atteignent Compose |
+| Régression X11 | aucune : les 10 assertions X11 passent toujours |
+
+Le test (`scripts/test-wayland.sh`) lance **sway avec le backend headless de wlroots**, la même famille
+wlroots qu'utilise labwc (donc Budgie). Il n'y a **délibérément aucun serveur X dans le conteneur** pour ce
+run : si GLFW était retombé sur X11, il n'y aurait eu nulle part où retomber et l'app serait morte. Le fait
+qu'une frame soit rendue est donc en soi la preuve que le chemin Wayland fonctionne.
+
+Les entrées passent par `wtype` (le protocole virtual-keyboard), car **xdotool ne peut pas piloter un client
+Wayland** : Wayland interdit à un client d'injecter des événements dans un autre. C'est le modèle de
+sécurité que X11 n'a jamais eu, et il faut le savoir avant de planifier la moindre automatisation Wayland.
+
+### Le pari du dlopen a payé par accident
+
+trixie ne livre pas la même ICU que bookworm. **Le même binaire, sans recompilation, a trouvé ICU 72 sur
+bookworm et ICU 76 sur trixie, et a fonctionné sur les deux.** C'est exactement le scénario pour lequel le
+chargement au runtime du Jalon 8 avait été conçu, et il s'est produit pour de vrai, sans l'avoir prévu : un
+binaire lié contre ICU 72 n'aurait tout simplement pas démarré ici.
+
+### Deux bugs de harnais à retenir
+
+- **Le builder Docker legacy ignore `--platform`.** `DOCKER_BUILDKIT=0` (ajouté plus tôt pour contourner un
+  timeout de registre) produisait silencieusement une image **amd64** sur un hôte arm64, et le `.kexe` arm64
+  échouait avec « No such file or directory ». Garder buildkit ; puller l'image de base d'abord s'il
+  timeoute.
+- **Chaque invocation de `wtype` perd sa première touche.** Elle crée un clavier virtuel éphémère, envoie
+  son propre keymap, et la première touche est perdue pendant que le client le recharge (mesuré : un appel
+  de préchauffage séparé a produit zéro événement ; `"wayland"` arrivait toujours en `"ayland"`). Le
+  correctif est un caractère sacrificiel dans la même chaîne. Ce n'est **pas** un problème de disposition
+  clavier : le caractère perdu est toujours le premier quel qu'il soit, et `w` arrive bien en `w`
+  (codepoint 119), pas en `z` mal mappé.
+
+
+### Temps passé
+
+- Jalon 9 (cette session) : ~1 h (bump GLFW 3.4, image trixie, harnais Wayland, non-régressions).
 
 ## Route A1 (build monorepo complet) : recette + mur, et le poll Maven
 

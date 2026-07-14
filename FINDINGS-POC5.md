@@ -453,13 +453,160 @@ contradict each other.
   embed minimal CLDR data (no dependency, limited coverage).
 - **IME** (`zwp_text_input_v3` or IBus/Fcitx over D-Bus). No virtual keyboard and no CJK input without it.
   Not verifiable in this harness: it needs a real compositor or input-method daemon.
-- **Accessibility** (AT-SPI2 over D-Bus), rich clipboard (MIME types) and drag-and-drop. Note that the JVM
-  desktop backend has **no working Linux accessibility either** (`Accessibility.desktop.kt` returns early
-  on any OS that is not macOS or Windows), so this is an opportunity, not a regression.
+- **Accessibility** (AT-SPI2 over D-Bus), rich clipboard (MIME types) and drag-and-drop. Worth knowing what
+  the JVM desktop backend actually does on Linux, since it sets the bar: the accessibility tree **is** built
+  and exposed there (`accessibleContextProvider` is handed to the SkiaLayer on every OS), but **focus
+  notification does nothing on Linux**: `requestFocusOnAccessible` wires only Windows (Java Access Bridge)
+  and macOS (`CAccessible`), and returns early on anything else. So a screen reader could read the tree but
+  would never be told what has focus. Partial, not absent.
 
 ### Time spent
 
 - Jalon 7 (this session): ~2 h (inventory, Lot 1, Lot 2, X11 input test harness).
+
+## Jalon 8: real localization (ICU at runtime), and tests that click by name
+
+Jalon 7 left month and weekday names in English: CLDR data cannot be derived, it has to be read. Getting it
+means ICU4C, and ICU comes with a trap.
+
+### Why ICU is dlopen'd, not linked
+
+ICU renames every exported symbol with its major version. The library exports `udat_open_72`, never
+`udat_open` (the headers rewrite the call with a macro). **A binary linked against ICU 72 therefore fails to
+start on a distro shipping ICU 74.** For a binary meant to be shipped, that is not acceptable.
+
+So the loader (`icu/IcuLoader.kt`) `dlopen`s the library, finds which version is actually installed, and
+resolves the suffixed symbols with `dlsym`. The bindings (`icu/IcuApi.kt`) cover date formatting, the
+calendar, locale orientation and case mapping. Every call degrades to the previous behaviour when ICU is
+absent, so the app still runs without it.
+
+The test verifies this directly: **the binary carries no ICU entry in its `NEEDED` list**. It starts against
+ICU 72, ICU 74, or none at all.
+
+### What the locale now actually does
+
+| | Before | After |
+|---|---|---|
+| Month/weekday names | English, always | `14 juillet 2026`, week starts `lundi` (fr_FR) |
+| Date field order | region table | CLDR pattern via `udatpg_getBestPattern` |
+| First day of week | region table | `ucal_getAttribute` |
+| 12h/24h | region table | derived from the locale's own time pattern |
+| RTL | hand-kept table | `uloc_getCharacterOrientation` (table is now the fallback) |
+| Case mapping | root locale (Turkish `i` -> `I`, wrong) | locale-aware (`u_strToUpper`) |
+
+### Tests click by name, not by pixel
+
+The input tests drive the app with real X11 events, so they need screen coordinates. Hardcoding them broke
+silently: adding two lines to the UI shifted every widget by ~45px, the clicks landed on labels, and the
+tests still reported PASS because the events did reach Compose, just not the widget.
+
+The mediator now walks Compose's semantics tree, the one `Modifier.testTag()` writes into, and dumps each
+tag with its real bounds (`testsupport/SemanticsExport.kt`). Tests aim at tags. The same tree is what an
+AT-SPI accessibility bridge would consume, so this is not throwaway plumbing.
+
+### Five bugs the tests found, three of which were making tests pass wrongly
+
+- **`LD_LIBRARY_PATH=/nonexistent` does not hide a library from `dlopen`**, which searches the system paths
+  anyway. The "without ICU" test passed while ICU was loaded the entire time.
+- **Removing libicu breaks mesa**: its DRI drivers pull ICU in through libxml2, so the window never opens
+  and the app dies before reaching any ICU code. On a Linux box that renders with GL, ICU is always
+  present. "No ICU at all" is not a real scenario; independence from the ICU *version* is the real benefit,
+  and that is what the test now checks.
+- **`python3-minimal` ships without the `json` module.** Reading the tag dump failed silently, so every
+  click went to the centre of the screen. The dump is now a plain `tag x y w h` line read with awk.
+- A lone `y` in a pattern was treated as two digits (`26` instead of `2026`). CLDR says `yy` is two digits;
+  `y` is the full year.
+- The no-ICU fallback did not reorder the skeleton's fields, producing `26 July 14`.
+
+### What is still missing
+
+- **IME** (`zwp_text_input_v3`, or IBus/Fcitx over D-Bus). No virtual keyboard, no CJK input. Not verifiable
+  in this harness: it needs a real compositor or input-method daemon.
+- **Accessibility** (AT-SPI2 over D-Bus). The semantics tree is now exported, which is the input side of it.
+  For reference, the JVM desktop backend is only partly there on Linux: it builds and exposes the
+  accessibility tree, but never notifies focus changes (see Jalon 7).
+- **Rich clipboard** (MIME types beyond plain text) and **drag-and-drop**.
+
+### Time spent
+
+- Jalon 8 (this session): ~1 h 30 (ICU loader + bindings, semantics export, three test suites).
+
+## Jalon 9: native Wayland, in the same binary as X11
+
+Every previous Jalon ran on X11. That is no longer enough: **Budgie 10.10 moved to Wayland (labwc, wlroots)
+and Ubuntu Budgie 26.04 ships no X11 session at all**. An X11-only binary would run there only through
+XWayland, in degraded mode. Supporting GNOME and KDE, in Wayland and in X11, is a hard requirement.
+
+### The blocker was a dependency version, not code
+
+The stack was on **GLFW 3.3.8**, which picks its backend **at compile time**: Debian ships `libglfw3` (X11)
+and `libglfw3-wayland` as two incompatible packages. A 3.3 binary is X11-only, full stop.
+
+**GLFW 3.4 selects the backend at runtime** (`glfwGetPlatform`, `glfwPlatformSupported`) and `dlopen`s it,
+so GLFW itself links neither X11 nor Wayland. Debian trixie ships 3.4, and marks `libglfw3-wayland` as a
+*transitional* package: one library, both backends.
+
+### The binary still pulled X11 in, through libGL
+
+Bumping GLFW was not enough, and the first version of this Jalon claimed otherwise. `ldd` on the binary
+showed **`libX11.so.6`**, and it did not come from GLFW: it came from **`libGL`**. Desktop GL carries GLX,
+which is X11 by construction, so `-lGL` drags libX11 in. On a Wayland-only system with no libX11, the binary
+would not have started, which is exactly the case this Jalon exists to support.
+
+It turned out to be removable. The app references **no GLX symbol at all**: it resolves GL through EGL
+(`eglGetCurrentDisplay`, `eglGetProcAddress`), and all **105** `gl*` symbols it needs are provided by
+`libGLESv2`. Linking `-lGLESv2` instead of `-lGL` drops libX11 entirely:
+
+    before: libglfw.so.3, libGL.so.1, libX11.so.6, ...
+    after:  libglfw.so.3, libGLESv2.so.2, libGLdispatch.so.0     (no libX11, no libwayland)
+
+Both suites stay green after the change. So the binary now genuinely has **no display-server dependency at
+link time**: it picks X11 or Wayland at runtime, and needs neither present to start.
+
+So this Jalon is a dependency bump (bookworm -> trixie) plus one linker change plus a test harness. No
+platform code was written.
+
+### What is proven
+
+| | |
+|---|---|
+| GLFW backend chosen at runtime | **Wayland**, with **no X server present at all** (`DISPLAY` unset) |
+| Both backends in one binary | `wayland supported = true, x11 supported = true` |
+| Rendering | skiko GL surface on Wayland (EGL path), frames drawn |
+| Keyboard | real Wayland key events reach Compose |
+| X11 regression | none: the 10 X11 assertions still pass |
+
+The test (`scripts/test-wayland.sh`) runs **sway with the headless wlroots backend**, the same wlroots family
+labwc (hence Budgie) uses. There is deliberately **no X server in the container for that run**: if GLFW had
+fallen back to X11, there would have been nothing to fall back to and the app would have died. Rendering a
+frame is therefore itself the proof that the Wayland path works.
+
+Input goes through `wtype` (the virtual-keyboard protocol), because **xdotool cannot drive a Wayland
+client**: Wayland forbids one client from injecting events into another. That is the security model X11
+never had, and it is worth knowing before planning any Wayland automation.
+
+### The dlopen bet paid off by accident
+
+trixie ships a different ICU than bookworm. **The same binary, with no recompilation, found ICU 72 on
+bookworm and ICU 76 on trixie, and worked on both.** That is exactly the scenario the runtime loading of
+Jalon 8 was built for, and it happened for real, unplanned: a binary linked against ICU 72 would simply not
+have started here.
+
+### Two harness bugs worth recording
+
+- **The legacy Docker builder ignores `--platform`.** `DOCKER_BUILDKIT=0` (added earlier to work around a
+  registry timeout) silently produced an **amd64** image on an arm64 host, and the arm64 `.kexe` failed with
+  "No such file or directory". Keep buildkit; pull the base image first if it times out.
+- **Every `wtype` invocation loses its first keystroke.** It creates a throwaway virtual keyboard, sends its
+  own keymap, and the first key is dropped while the client reloads it (measured: a separate warm-up call
+  produced zero events; `"wayland"` always arrived as `"ayland"`). The fix is a sacrificial character inside
+  the same string. This is not a keyboard-layout problem: the lost character is always the first one
+  whatever it is, and `w` arrives as `w` (codepoint 119), not as a mismapped `z`.
+
+
+### Time spent
+
+- Jalon 9 (this session): ~1 h (GLFW 3.4 bump, trixie image, Wayland harness, regressions).
 
 ## Route A1 (full monorepo build): recipe + wall, and the Maven poll
 

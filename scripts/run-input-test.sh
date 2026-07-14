@@ -21,9 +21,10 @@ KEXE="build/bin/${KDIR}/debugExecutable/${POC}.kexe"
 [ -f "$KEXE" ] || { echo "no binary at $KEXE"; exit 1; }
 
 mkdir -p out
-# BUILDKIT=0: buildkit re-resolves the base image against the registry even when it is already local,
-# and times out on a slow/offline network. The legacy builder uses the cached image.
-DOCKER_BUILDKIT=0 docker build --platform "$PLATFORM" -f "$ROOT/scripts/docker/Dockerfile.run" \
+# Keep buildkit: the legacy builder IGNORES --platform, so it silently produced an amd64 image on an arm64
+# host and the .kexe would not run ("No such file or directory"). If buildkit times out resolving the base
+# image, `docker pull debian:trixie-slim` first rather than falling back to the legacy builder.
+docker build --platform "$PLATFORM" -f "$ROOT/scripts/docker/Dockerfile.run" \
   -t "poc-native-run-$ARCH" "$ROOT/scripts/docker" >/dev/null
 
 echo "[$POC] running the input acceptance test under Xvfb ($ARCH)..."

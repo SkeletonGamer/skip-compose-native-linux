@@ -134,6 +134,8 @@ the witness app, then de-Android-ifies it with `scripts/patch-export.sh`. Then r
 | POC 6: transpiled SkipUI on CMP Desktop (JVM) | `scripts/run-jvm.sh poc6-skip-cmp` |
 | POC 5: input acceptance test (real X11 events) | `scripts/run-input-test.sh` |
 | POC 5: locale + right-to-left test | see `scripts/test-locale.sh` |
+| POC 5: ICU (runtime dlopen, with and without) | see `scripts/test-icu.sh` |
+| POC 5: native Wayland (wlroots compositor, no X server) | see `scripts/test-wayland.sh` |
 
 `run-native.sh` takes an architecture as its third argument (`arm64` by default, or `x64`), so the same
 stack can be run on both Linux architectures: `scripts/run-native.sh poc5-native release x64`.
@@ -142,6 +144,25 @@ The input test is worth a word: it does not simulate input inside the app. It ru
 and drives it with **real X11 events** via `xdotool` (keys, mouse wheel, pointer, window resize), then
 reads the **real system clipboard** back with `xclip` from another process. That is how the platform layer
 is verified: if a GLFW callback or a platform actual is not wired, the test fails.
+
+Widgets are located by **tag, not by pixel**: the app walks Compose's semantics tree (what
+`Modifier.testTag()` writes into) and exports each widget's real bounds, which the test reads. Hardcoded
+coordinates used to break silently whenever the UI gained a line.
+
+ICU is loaded at runtime with `dlopen`, never linked, because ICU renames its symbols per major version
+(`udat_open_72`): a linked binary would refuse to start wherever a different ICU ships. `test-icu.sh`
+checks both that localization works (French month names come from CLDR) and that the app still runs when
+ICU is missing. This is not theoretical: the same binary found ICU 72 on Debian bookworm and ICU 76 on
+trixie, with no recompilation.
+
+**X11 and Wayland, one binary, with no display-server dependency at link time.** GLFW 3.4 picks its backend
+at runtime and `dlopen`s it. That alone was not enough: the binary still pulled `libX11` in through
+**`libGL`** (desktop GL carries GLX, which is X11 by construction). The app uses no GLX symbol at all, and
+every `gl*` symbol it needs is in `libGLESv2`, so linking `-lGLESv2` instead of `-lGL` removes libX11
+entirely. `ldd` now shows neither libX11 nor libwayland. `test-wayland.sh` runs the app on a headless
+**wlroots** compositor with **no X server at all**, so there is nothing to fall back to: rendering a frame
+proves the Wayland path.
+
 
 Prerequisites (a JDK, Docker, the Skip toolchain), overrides and the full matrix are in
 [`scripts/README.md`](./scripts/README.md).

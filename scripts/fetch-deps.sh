@@ -27,8 +27,12 @@ extract_native() {
   [ -f "$stage/lib/libglfw.so.3" ] && return 0
   echo "[native] extracting GLFW/GL/EGL/fontconfig/freetype for $platform (docker)..."
   rm -rf "$stage"; mkdir -p "$stage/lib" "$stage/include"
+  # trixie, not bookworm: it ships GLFW 3.4, which selects X11 or Wayland AT RUNTIME (glfwGetPlatform,
+  # backends dlopen'd, so neither appears in the binary's NEEDED). GLFW 3.3 picks its backend at compile
+  # time and Debian ships two incompatible packages, so a 3.3 binary is X11-only. Wayland is not optional:
+  # Ubuntu Budgie 26.04 ships no X11 session at all.
   docker run --rm --platform "$platform" -v "$stage:/stage" -e TRIPLET="$triplet" \
-    debian:bookworm-slim bash -lc '
+    debian:trixie-slim bash -lc '
     set -e
     # Some Docker/network setups break apt gpgv on the release signatures even though the download itself
     # is intact (verified: wget fetches the InRelease fine). Mark the repos Trusted so apt skips the gpg
@@ -36,13 +40,13 @@ extract_native() {
     cat > /etc/apt/sources.list.d/debian.sources <<EOF
 Types: deb
 URIs: http://deb.debian.org/debian
-Suites: bookworm bookworm-updates
+Suites: trixie trixie-updates
 Components: main
 Trusted: yes
 
 Types: deb
 URIs: http://deb.debian.org/debian-security
-Suites: bookworm-security
+Suites: trixie-security
 Components: main
 Trusted: yes
 EOF
@@ -52,8 +56,14 @@ EOF
       libgl1-mesa-dri libglx-mesa0 libgl1 libegl1 libgles2 \
       libfontconfig1 libfontconfig-dev libfreetype6 libfreetype-dev >/dev/null
     cp -aL /usr/lib/$TRIPLET/libglfw.so* /stage/lib/ 2>/dev/null || true
-    cp -aL /usr/lib/$TRIPLET/libGL.so* /usr/lib/$TRIPLET/libEGL.so* /stage/lib/ 2>/dev/null || true
+    # GLESv2 as well as GL: the binary links against GLESv2, not desktop GL. Desktop libGL carries GLX and
+    # therefore drags libX11 in, which was the last X11 tie in an otherwise Wayland-capable binary.
+    cp -aL /usr/lib/$TRIPLET/libGL.so* /usr/lib/$TRIPLET/libEGL.so* /usr/lib/$TRIPLET/libGLESv2.so* /stage/lib/ 2>/dev/null || true
+    # The linker resolves -lGLESv2 through the unversioned soname, which the runtime package does not ship.
+    ln -sf libGLESv2.so.2 /stage/lib/libGLESv2.so 2>/dev/null || true
+    ln -sf libEGL.so.1 /stage/lib/libEGL.so 2>/dev/null || true
     cp -aL /usr/lib/$TRIPLET/libfontconfig.so* /usr/lib/$TRIPLET/libfreetype.so* /stage/lib/ 2>/dev/null || true
+    # The 3.4 headers matter as much as the library: glfwGetPlatform / GLFW_PLATFORM do not exist in 3.3.
     cp -aL /usr/include/GLFW/glfw3.h /usr/include/GLFW/glfw3native.h /stage/include/ 2>/dev/null || true
   ' || true
   # Do not fail silently: if the apt step could not produce the libs, say so with a concrete hint.

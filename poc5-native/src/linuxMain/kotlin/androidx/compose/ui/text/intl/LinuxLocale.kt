@@ -12,6 +12,7 @@
 
 package androidx.compose.ui.text.intl
 
+import icu.IcuApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
 
@@ -61,13 +62,18 @@ internal actual fun createPlatformLocaleDelegate(): PlatformLocaleDelegate =
         override val current: LocaleList get() = LocaleList(listOf(Locale.current))
     }
 
-// An explicit RTL script wins over the language (e.g. "az-Arab" is RTL, plain "az" is not).
 internal actual fun Locale.isRtl(): Boolean = isRightToLeft()
 
 /**
  * Same test, reachable from the mediator: it has to pick the scene's LayoutDirection, and Compose's own
  * isRtl() is internal to ui-text. The desktop backend derives this from AWT's ComponentOrientation.
+ *
+ * ICU answers from CLDR when present. The table is the fallback: it covers the RTL languages and scripts,
+ * which are few and stable, but it will not know about a locale CLDR has and it does not.
  */
-fun Locale.isRightToLeft(): Boolean =
-    script.takeIf { it.isNotEmpty() }?.let { it in RTL_SCRIPTS }
+fun Locale.isRightToLeft(): Boolean {
+    IcuApi.isRtl(toLanguageTag().replace('-', '_'))?.let { return it }
+    // An explicit RTL script wins over the language (e.g. "az-Arab" is RTL, plain "az" is not).
+    return script.takeIf { it.isNotEmpty() }?.let { it in RTL_SCRIPTS }
         ?: (language.lowercase() in RTL_LANGUAGES)
+}

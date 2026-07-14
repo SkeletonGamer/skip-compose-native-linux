@@ -137,6 +137,8 @@ l'app witness, puis la dé-Android-ise avec `scripts/patch-export.sh`. Ensuite, 
 | POC 6 : SkipUI transpilé sur CMP Desktop (JVM) | `scripts/run-jvm.sh poc6-skip-cmp` |
 | POC 5 : test d'acceptation des entrées (vrais événements X11) | `scripts/run-input-test.sh` |
 | POC 5 : test locale + droite-à-gauche | voir `scripts/test-locale.sh` |
+| POC 5 : ICU (dlopen au runtime, avec et sans) | voir `scripts/test-icu.sh` |
+| POC 5 : Wayland natif (compositeur wlroots, sans serveur X) | voir `scripts/test-wayland.sh` |
 
 `run-native.sh` prend une architecture en troisième argument (`arm64` par défaut, ou `x64`), ce qui permet
 de faire tourner la même pile sur les deux architectures Linux :
@@ -147,6 +149,25 @@ binaire sous Xvfb et le pilote avec de **vrais événements X11** via `xdotool` 
 redimensionnement de fenêtre), puis relit le **vrai presse-papiers système** avec `xclip` depuis un autre
 processus. C'est ainsi que la couche plateforme est vérifiée : si une callback GLFW ou un actual de
 plateforme n'est pas branché, le test échoue.
+
+Les widgets sont repérés par **tag, pas par pixel** : l'app parcourt l'arbre sémantique de Compose (celui
+qu'alimente `Modifier.testTag()`) et exporte les bornes réelles de chaque widget, que le test lit. Des
+coordonnées codées en dur cassaient en silence dès que l'UI gagnait une ligne.
+
+ICU est chargé au runtime par `dlopen`, jamais lié, car ICU renomme ses symboles par version majeure
+(`udat_open_72`) : un binaire lié refuserait de démarrer partout où une autre version d'ICU est livrée.
+`test-icu.sh` vérifie à la fois que la localisation fonctionne (les noms de mois français viennent de CLDR)
+et que l'app tourne encore quand ICU est absent. Ce n'est pas théorique : le même binaire a trouvé ICU 72
+sur Debian bookworm et ICU 76 sur trixie, sans recompilation.
+
+**X11 et Wayland, un seul binaire, sans aucune dépendance au serveur d'affichage au link.** GLFW 3.4 choisit
+son backend à l'exécution et le charge par `dlopen`. Cela ne suffisait pas : le binaire tirait encore
+`libX11` via **`libGL`** (le GL desktop embarque GLX, qui est X11 par construction). L'app n'utilise aucun
+symbole GLX, et tous les symboles `gl*` dont elle a besoin sont dans `libGLESv2` : lier `-lGLESv2` au lieu de
+`-lGL` supprime complètement libX11. `ldd` ne montre désormais ni libX11 ni libwayland. `test-wayland.sh`
+lance l'app sur un compositeur **wlroots** headless **sans aucun serveur X**, donc sans repli possible : le
+fait qu'une frame soit rendue prouve le chemin Wayland.
+
 
 Les prérequis (un JDK, Docker, la chaîne d'outils Skip), les overrides et la matrice complète sont dans
 [`scripts/README.md`](./scripts/README.md).

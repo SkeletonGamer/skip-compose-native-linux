@@ -42,8 +42,11 @@ import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.platform.FrameRecomposer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.scene.CanvasLayersComposeScene
+import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.intl.isRightToLeft
+import testsupport.SemanticsExport
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -115,30 +118,36 @@ private fun App(clipboard: Clipboard) {
             // Locale comes from the POSIX environment now, not a hardcoded en-US. With LANG=ar_EG the
             // whole column mirrors, because the scene's LayoutDirection follows it.
             Text("locale: ${locale.toLanguageTag()}", Modifier.padding(top = 4.dp))
+            // Proof that CLDR data is reaching material3: the month/weekday names below come from ICU,
+            // and they are the thing that cannot be derived without it.
+            Text("date: ${localizedDateSample(locale)}", Modifier.padding(top = 2.dp))
 
             // Keyboard: typing here proves glfwSetCharCallback -> scene.sendKeyEvent -> Compose.
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 label = { Text("type here") },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("field"),
             )
             // Echoed so a screenshot can prove what was typed.
             Text("typed: [$text]", modifier = Modifier.padding(top = 4.dp))
 
             Row(Modifier.padding(top = 8.dp)) {
-                Button(onClick = { count++ }) { Text("count: $count") }
+                Button(onClick = { count++ }, modifier = Modifier.testTag("count")) { Text("count: $count") }
                 // Clipboard: writes to the real X11/Wayland clipboard via GLFW.
                 Button(
                     onClick = { scope.launch { clipboard.setClipEntry(clipEntryOf("copied:$text")) } },
-                    modifier = Modifier.padding(start = 8.dp),
+                    modifier = Modifier.padding(start = 8.dp).testTag("copy"),
                 ) { Text("copy") }
             }
 
             // Scroll: the mouse wheel must move this. Both the ScrollConfig and the GLFW scroll
             // callback had to exist for this to work; either one missing means it stays at 0.
             Text("first visible item: ${listState.firstVisibleItemIndex}", Modifier.padding(top = 8.dp))
-            LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().height(120.dp)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxWidth().height(120.dp).testTag("list"),
+            ) {
                 items((1..40).toList()) { i -> Text("item $i", Modifier.padding(4.dp)) }
             }
         }
@@ -148,6 +157,19 @@ private fun App(clipboard: Clipboard) {
 // Small helper: ClipEntry's factory is @ExperimentalComposeUiApi and lives on the companion.
 private fun clipEntryOf(text: String) =
     androidx.compose.ui.platform.ClipEntry.withPlainText(text)
+
+// Formats a fixed date (2026-07-14) through material3's own PlatformDateFormat, the same class the
+// DatePicker uses. With ICU present this comes out as "14 juillet 2026" under fr_FR and "July 14, 2026"
+// under en_US; without ICU both fall back to English.
+private fun localizedDateSample(locale: androidx.compose.ui.text.intl.Locale): String {
+    val fmt = androidx.compose.material3.internal.PlatformDateFormat(
+        androidx.compose.material3.CalendarLocale(locale.toLanguageTag())
+    )
+    val millis = 1_784_000_000_000L // 2026-07-14T05:33:20Z
+    val date = fmt.formatWithSkeleton(millis, "yMMMMd", mutableMapOf())
+    val firstDay = fmt.weekdayNames.firstOrNull()?.first ?: "?"
+    return "$date | week starts: $firstDay"
+}
 
 private fun writePng(surface: Surface, width: Int, height: Int, path: String) {
     val bmp = org.jetbrains.skia.Bitmap().apply { allocN32Pixels(width, height) }
@@ -190,7 +212,19 @@ fun main() = runBlocking {
 
     logln("POC5: start")
     if (glfwInit() == 0) { logln("glfwInit failed (no display?)"); return@runBlocking }
-    logln("POC5: glfw init ok")
+
+    // GLFW 3.4 picks X11 or Wayland at runtime (it dlopens the backend, so neither is in our NEEDED list).
+    // Say which one we actually got: the app has to work on both, and Budgie 10.10 / Ubuntu Budgie 26.04
+    // ship no X11 session at all any more.
+    val platformName = when (val p = glfwGetPlatform()) {
+        GLFW_PLATFORM_WAYLAND -> "Wayland"
+        GLFW_PLATFORM_X11 -> "X11"
+        GLFW_PLATFORM_NULL -> "null (headless)"
+        else -> "unknown($p)"
+    }
+    logln("POC5: glfw init ok, platform = $platformName")
+    logln("POC5: wayland supported = ${glfwPlatformSupported(GLFW_PLATFORM_WAYLAND) == GLFW_TRUE}, " +
+        "x11 supported = ${glfwPlatformSupported(GLFW_PLATFORM_X11) == GLFW_TRUE}")
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE)
     val window = glfwCreateWindow(width, height, "POC5 ui-glfw material3 (K/N Linux)", null, null)
         ?: run { logln("window null"); glfwTerminate(); return@runBlocking }
@@ -254,6 +288,18 @@ fun main() = runBlocking {
             glfwSetCursor(window, GlfwBridge.cursors[kind])
             logln("POC5: cursor -> $kind")
         }
+        // Compose's semantics tree, which Modifier.testTag() feeds. The mediator publishes it so tests can
+        // locate widgets by name rather than by pixel. This is also the tree an AT-SPI bridge would use.
+        override val semanticsOwnerListener = object : PlatformContext.SemanticsOwnerListener {
+            override fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner) {
+                SemanticsExport.owner = semanticsOwner
+            }
+            override fun onSemanticsOwnerRemoved(semanticsOwner: SemanticsOwner) {
+                if (SemanticsExport.owner === semanticsOwner) SemanticsExport.owner = null
+            }
+            override fun onSemanticsChange(semanticsOwner: SemanticsOwner) = Unit
+            override fun onLayoutChange(semanticsOwner: SemanticsOwner, semanticsNodeId: Int) = Unit
+        }
     }
     // Text direction follows the system locale, the way the desktop backend derives it from AWT's
     // ComponentOrientation. Without this the scene is always Ltr, so an Arabic or Hebrew locale would
@@ -262,6 +308,9 @@ fun main() = runBlocking {
     val layoutDirection =
         if (locale.isRightToLeft()) LayoutDirection.Rtl else LayoutDirection.Ltr
     logln("POC5: locale = ${locale.toLanguageTag()}, layout direction = $layoutDirection")
+    // ICU is dlopen'd, not linked, so say which one (if any) this run actually found.
+    logln("POC5: ${icu.Icu.describe}")
+    logln("POC5: date sample = ${localizedDateSample(locale)}")
 
     val frameRecomposer = FrameRecomposer(coroutineContext)
     val scene = CanvasLayersComposeScene(
@@ -391,6 +440,13 @@ fun main() = runBlocking {
         context.flush()
         glfwSwapBuffers(window)
         glfwPollEvents()
+
+        // Publish where every tagged widget actually is, once the first layout has settled. Tests read this
+        // and click by tag, so a UI change cannot silently make them click on the wrong thing.
+        if (frame == 3) {
+            SemanticsExport.dump("/out/tags.txt")
+            logln("POC5: semantics tags exported to /out/tags.txt")
+        }
 
         if (headless) {
             if (frame % 20 == 0) logln("POC5: frame $frame")

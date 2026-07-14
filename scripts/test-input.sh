@@ -21,7 +21,7 @@ RESULT=/out/result.txt
 pass() { echo "PASS: $1" | tee -a "$RESULT"; }
 fail() { echo "FAIL: $1" | tee -a "$RESULT"; }
 
-export POC5_RUN_SECONDS=30
+export POC5_RUN_SECONDS=60
 "$APP" > "$LOG" 2>&1 &
 APP_PID=$!
 
@@ -40,29 +40,48 @@ eval "$(xdotool getwindowgeometry --shell "$WID")"   # sets X, Y, WIDTH, HEIGHT
 echo "window at ${X},${Y} size ${WIDTH}x${HEIGHT}"
 sleep 1
 
-# Widget coordinates inside the 640x480 window (see App() in main.kt).
-click_at() { xdotool mousemove --sync $((X + $1)) $((Y + $2)); sleep 0.3; xdotool click 1; sleep 0.5; }
+# Widgets are located by TAG, not by pixel. The app walks Compose's semantics tree (what Modifier.testTag
+# writes into) and dumps "tag x y w h" per line to /out/tags.txt. Hardcoded coordinates used to break
+# silently whenever the UI gained a line: the clicks landed on labels, and the tests still "passed" because
+# the events did reach Compose, just not the widget.
+TAGS=/out/tags.txt
+for _ in $(seq 1 40); do [ -s "$TAGS" ] && break; sleep 0.25; done
+[ -s "$TAGS" ] || { echo "FAIL: the app never exported its semantics tags" | tee -a "$RESULT"; exit 1; }
+echo "tags:"; cat "$TAGS"
+pass "semantics: the app exported its tagged widgets ($(wc -l < "$TAGS" | tr -d ' ') tags)"
+
+# centre_of <tag> -> "cx cy", the centre of that widget in window coordinates. awk, not python: the image's
+# python3-minimal has no json module, and it failed silently -- every click went to the screen centre.
+centre_of() { awk -v t="$1" '$1 == t { print $2 + $4 / 2, $3 + $5 / 2; found = 1 } END { exit !found }' "$TAGS"; }
+move_to_tag() {
+  local coords cx cy
+  coords=$(centre_of "$1") || { fail "tag '$1' not found in the semantics dump"; return 1; }
+  cx=${coords% *}; cy=${coords#* }
+  [ -n "$cx" ] && [ -n "$cy" ] || { fail "tag '$1' has no coordinates"; return 1; }
+  xdotool mousemove --sync $((X + cx)) $((Y + cy))
+}
+click_tag() { move_to_tag "$1" || return; sleep 0.3; xdotool click 1; sleep 0.5; }
+hover_tag() { move_to_tag "$1" || return; sleep 0.5; }
 
 # --- 1. KEYBOARD: click into the text field, then type. Proves char callback -> sendKeyEvent -> Compose.
-click_at 320 90
+click_tag field
 xdotool type --delay 60 "hello"
 sleep 1.5
 
 # --- 2. SCROLL: real pointer over the LazyColumn, then wheel down (button 5).
-xdotool mousemove --sync $((X + 320)) $((Y + 300))
-sleep 0.5
+hover_tag list
 for _ in 1 2 3 4 5; do xdotool click 5; sleep 0.2; done
 sleep 1.5
 
-# --- 3. CLIPBOARD: press "copy", which writes to the real X11 clipboard through GLFW.
-click_at 172 172
+# --- 3. CLIPBOARD: press "copy", which writes to the real X11 clipboard via GLFW.
+click_tag copy
 sleep 1.5
 
 # Read the clipboard WHILE the app still owns the selection.
 CLIP=$(timeout 5 xclip -selection clipboard -o 2>/dev/null || echo "")
 
-# --- 4. HOVER: move over the count button; Compose asks for a cursor via PlatformContext.setPointerIcon.
-xdotool mousemove --sync $((X + 60)) $((Y + 172))
+# --- 4. HOVER: move over the text field; Compose asks for an I-beam via PlatformContext.setPointerIcon.
+hover_tag field
 sleep 1
 
 # --- 5. RESIZE: the surface, the render target and the scene size must all follow the window.
@@ -85,6 +104,9 @@ if grep -q "typed codepoint=104" "$LOG" && grep -q "typed codepoint=101" "$LOG";
 else
   fail "keyboard: no char events reached Compose"
 fi
+
+# Reaching Compose is not enough: the text must land in the FIELD, which needs the click to have focused
+# it. The clipboard content below is the end-to-end proof, since the copy button copies the typed text.
 
 if grep -q "POC5: scroll dy=" "$LOG"; then
   pass "scroll: wheel events reached the mediator"

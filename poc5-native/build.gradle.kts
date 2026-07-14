@@ -41,9 +41,14 @@ kotlin {
         binaries {
             executable {
                 entryPoint = "main"
+                // GLESv2, not GL. Desktop libGL carries GLX, so it drags libX11 in, and that was the
+                // binary's LAST tie to X11 (GLFW itself dlopens its backends and links neither). The app
+                // needs no GLX at all: it resolves GL through EGL, and all 105 gl* symbols it references
+                // are provided by libGLESv2. Dropping -lGL makes the binary run on a Wayland-only system
+                // that ships no libX11.
                 linkerOpts(
                     "-L${project.file(libDir)}",
-                    "-lglfw", "-lGL", "-lEGL", "-lfontconfig", "-lfreetype",
+                    "-lglfw", "-lGLESv2", "-lEGL", "-lfontconfig", "-lfreetype",
                     "--allow-shlib-undefined",
                 )
             }

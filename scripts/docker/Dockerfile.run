@@ -1,7 +1,12 @@
-# Shared runner image for every native POC (poc3/poc4/poc5/poc6): run a pre-built linuxArm64 .kexe in a
-# Linux arm64 container under Xvfb, software GL (mesa llvmpipe). No JVM in the produced binary. The actual
-# command (which .kexe to run) is supplied by scripts/run-native.sh, so this image is POC-agnostic.
-FROM debian:bookworm-slim
+# Shared runner image for every native POC (poc3/poc4/poc5/poc6): run a pre-built .kexe in a Linux
+# container, software GL (mesa llvmpipe), no JVM in the produced binary. The actual command (which .kexe to
+# run) is supplied by scripts/run-native.sh, so this image is POC-agnostic.
+#
+# trixie, not bookworm: it ships GLFW 3.4, which picks X11 or Wayland AT RUNTIME. GLFW 3.3 (bookworm) picks
+# its backend at compile time and Debian ships two incompatible packages, so a 3.3 binary is X11-only.
+# Wayland is not optional any more: Budgie 10.10 moved to Wayland (labwc, wlroots) and Ubuntu Budgie 26.04
+# ships no X11 session at all.
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb xauth \
@@ -10,13 +15,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libfontconfig1 libfreetype6 fonts-dejavu-core \
         ca-certificates \
         xdotool xclip x11-utils \
+        libicu76 locales-all \
+        sway wtype wl-clipboard \
     && rm -rf /var/lib/apt/lists/*
-# xdotool/xclip/xwininfo drive the interactive test (scripts/test-input.sh): they inject REAL X11 key,
-# wheel and pointer events at the window and read back the real system clipboard, so the test exercises
-# the whole X11 -> GLFW -> Compose chain rather than the app talking to itself.
+# Two display stacks, because the app must work on both:
+#  - X11: Xvfb + xdotool (real X11 events) + xclip (real X11 clipboard).
+#  - Wayland: sway with the headless wlroots backend, the same wlroots family labwc/Budgie uses.
+#    Input goes through wtype (zwp_virtual_keyboard_v1), because xdotool CANNOT drive a Wayland client:
+#    Wayland forbids one client from injecting events into another. wl-clipboard reads the selection.
+# The tests locate widgets by tag, reading the semantics dump the app writes (/out/tags.txt) with awk. It is
+# a plain "tag x y w h" line per widget precisely so no JSON parser is needed: python3-minimal ships without
+# the json module, and it failed silently.
+# libicu provides the CLDR data (localized month/weekday names). It is dlopen'd at runtime, never linked
+# (ICU renames its symbols per major version), so the binary also runs where ICU is absent.
 
 ENV LIBGL_ALWAYS_SOFTWARE=1
 ENV GALLIUM_DRIVER=llvmpipe
+# sway/wlroots need these to come up headless, with no seat and no real GPU.
+ENV WLR_BACKENDS=headless
+ENV WLR_LIBINPUT_NO_DEVICES=1
+ENV WLR_RENDERER=pixman
+ENV XDG_RUNTIME_DIR=/tmp/xdg
 WORKDIR /app
 
 # run-native.sh overrides the command with the specific /app/<poc>.kexe; /out is bind-mounted for PNGs.
