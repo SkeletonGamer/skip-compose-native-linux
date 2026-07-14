@@ -31,6 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.KeyEvent
@@ -62,7 +65,10 @@ import glfwinput.hasAlt
 import glfwinput.hasCtrl
 import glfwinput.hasShift
 import glfwinput.hasSuper
+import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.CPointerVar
+import kotlinx.cinterop.get
 import kotlinx.cinterop.DoubleVar
 import kotlinx.cinterop.FloatVar
 import kotlinx.cinterop.IntVar
@@ -110,12 +116,25 @@ private fun nowNanos(): Long = memScoped {
 private fun App(clipboard: Clipboard) {
     var count by remember { mutableStateOf(0) }
     var text by remember { mutableStateOf("") }
+    var dropped by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
     val locale = androidx.compose.ui.text.intl.Locale.current
     MaterialTheme {
-        Column(Modifier.padding(16.dp)) {
+        Column(
+            Modifier.dragAndDropTarget(
+                shouldStartDragAndDrop = { true },
+                target = remember {
+                    object : DragAndDropTarget {
+                        override fun onDrop(event: DragAndDropEvent): Boolean {
+                            dropped = event.files.joinToString(", ") { it.substringAfterLast('/') }
+                            return true
+                        }
+                    }
+                },
+            ).padding(16.dp)
+        ) {
             Text("Compose material3 on Kotlin/Native Linux, no JVM")
             // Locale comes from the POSIX environment now, not a hardcoded en-US. With LANG=ar_EG the
             // whole column mirrors, because the scene's LayoutDirection follows it.
@@ -150,6 +169,11 @@ private fun App(clipboard: Clipboard) {
                     modifier = Modifier.padding(start = 8.dp).testTag("copy"),
                 ) { Text("copy") }
             }
+
+            // Drag and drop: a real target. Files dropped on the window arrive here through
+            // rootDragAndDropNode. No Kotlin/Native Compose target has drag and drop at all (the macOS
+            // actual cannot even construct a DragAndDropEvent), so this had to be built from the actual up.
+            Text("dropped: [$dropped]", Modifier.padding(top = 8.dp).testTag("dropped"))
 
             // Scroll: the mouse wheel must move this. Both the ScrollConfig and the GLFW scroll
             // callback had to exist for this to work; either one missing means it stays at 0.
@@ -215,6 +239,15 @@ private val fbSizeCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Int
 private val focusCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Int, Unit> { _, focused ->
     InputQueue.push(InputEvent.Focus(focused == GLFW_TRUE))
 }
+// Files dropped onto the window. GLFW hands us a C array of UTF-8 paths, valid only for the duration of
+// the callback, so they are copied out immediately.
+private val dropCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Int, CPointer<CPointerVar<ByteVar>>?, Unit> { _, count, paths ->
+    val list = mutableListOf<String>()
+    if (paths != null) {
+        for (i in 0 until count) paths[i]?.toKString()?.let { list.add(it) }
+    }
+    InputQueue.push(InputEvent.FileDrop(list))
+}
 
 fun main() = runBlocking {
     var width = 640
@@ -258,7 +291,8 @@ fun main() = runBlocking {
     glfwSetCursorPosCallback(window, cursorPosCb)
     glfwSetFramebufferSizeCallback(window, fbSizeCb)
     glfwSetWindowFocusCallback(window, focusCb)
-    logln("POC5: glfw callbacks wired (key, char, scroll, mouse, move, resize, focus)")
+    glfwSetDropCallback(window, dropCb)
+    logln("POC5: glfw callbacks wired (key, char, scroll, mouse, move, resize, focus, file drop)")
 
     // HiDPI: the framebuffer can be larger than the window. Density(1f) used to be hardcoded, so the UI
     // was drawn at 1x on a 2x screen.
@@ -429,6 +463,27 @@ fun main() = runBlocking {
                     logln("POC5: typed codepoint=${event.codePoint}")
                 }
                 is InputEvent.Focus -> winInfo.isWindowFocused = event.focused
+                is InputEvent.FileDrop -> {
+                    // Deliver the drop to Compose. The node wants the sequence a real drag produces:
+                    // started -> entered -> drop -> ended. Without started/entered, no dragAndDropTarget
+                    // has been offered the transfer and the drop is refused.
+                    val pos = Offset(cursorX.toFloat(), cursorY.toFloat())
+                    val dnd = scene.rootDragAndDropNode
+                    val startEvent = androidx.compose.ui.draganddrop.DragAndDropEvent(pos, event.paths)
+                    if (dnd.acceptDragAndDropTransfer(startEvent)) {
+                        // The full sequence a real drag produces. onMoved is what makes Compose hit-test
+                        // the pointer position and pick the target under it; without it the drop is
+                        // delivered to nobody and comes back refused.
+                        dnd.onStarted(startEvent)
+                        dnd.onEntered(startEvent)
+                        dnd.onMoved(startEvent)
+                        val accepted = dnd.onDrop(startEvent)
+                        dnd.onEnded(startEvent)
+                        logln("POC5: file drop (${event.paths.size} file(s)) accepted=$accepted")
+                    } else {
+                        logln("POC5: file drop (${event.paths.size} file(s)) -- no target accepted it")
+                    }
+                }
                 is InputEvent.Resize -> {
                     if (event.width > 0 && event.height > 0 && (event.width != width || event.height != height)) {
                         width = event.width; height = event.height
@@ -447,6 +502,19 @@ fun main() = runBlocking {
                     }
                 }
             }
+        }
+
+        // Drag and drop: nothing in the harness can perform a real XDND drag (xdotool cannot, and no
+        // Debian package provides a drag source), so the drop is injected here. What this DOES exercise is
+        // everything downstream of the window system: the DragAndDropEvent actual, rootDragAndDropNode, and
+        // Compose routing it to a dragAndDropTarget. The GLFW callback that feeds it (glfwSetDropCallback)
+        // is standard wiring but is NOT covered by a test.
+        if (frame == 70) {
+            // Drop in the middle of the window. Without a mouse the cursor sits at (0,0), which is outside
+            // the target once padding is applied, and Compose rightly refuses the drop.
+            cursorX = (width / 2).toDouble()
+            cursorY = (height / 2).toDouble()
+            InputQueue.push(InputEvent.FileDrop(listOf("/tmp/report.pdf", "/tmp/photo.png")))
         }
 
         // Headless demo: no real mouse, so inject a click on the count button to prove hit-testing.

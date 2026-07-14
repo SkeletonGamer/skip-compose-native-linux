@@ -773,6 +773,61 @@ No regressions: X11 (10 assertions) and Wayland (7) both still pass.
 
 - Jalon 11 (this session): ~1 h (modern contract, edit commands, ordering fixes).
 
+## Jalon 12: drag and drop, which no Kotlin/Native Compose target has
+
+### The starting point: this is not our gap, it is everyone's
+
+Before writing anything, it is worth knowing what the official ports actually do. The macOS K/N target, which
+JetBrains maintains, has this:
+
+    actual class DragAndDropEvent private constructor()
+    internal actual val DragAndDropEvent.positionInRoot: Offset
+        get() = TODO("Not yet implemented")
+
+A **private constructor**: no `DragAndDropEvent` can be created at all. Drag and drop therefore does not
+exist on any Kotlin/Native Compose target. Ours was a copy of that, with the same `TODO()`.
+
+The same holds for the other two gaps people would point at:
+
+- **`InteropView = Any`**: identical on macOS K/N. It is not a stub, it is the honest answer: in Kotlin/Native
+  there is no native widget toolkit to embed (iOS has `UIView`, desktop has Swing; native Linux has neither).
+- **Accessibility**: **no K/N target has any**, macOS included (no a11y file exists in `macosMain`).
+
+And `ClipEntry.clipMetadata` throws `TODO("ClipMetadata is not implemented")` on **every platform**,
+including the **JVM desktop backend that ships in production**. That one is not ours to fix.
+
+### What was built
+
+`DragAndDropEvent` now carries what the window system gives us (a position and the dropped file paths), so
+`positionInRoot` returns a real value and the `TODO()` is gone. GLFW's drop callback feeds it, and the
+mediator hands it to `ComposeScene.rootDragAndDropNode`, the same entry point the desktop backend uses.
+
+Files dropped on the window reach a Compose `dragAndDropTarget`: `dropped: [report.pdf, photo.png]`.
+
+### Two bugs worth recording
+
+- **The target was behind the padding.** `Modifier.padding(16.dp).dragAndDropTarget(...)` puts the drop zone
+  *inside* the padding, so a drop at the window origin lands outside it and Compose rightly refuses it.
+- **`onMoved` is not optional.** Sending `started -> entered -> drop` returns `accepted=false` with no error:
+  without `onMoved`, Compose never hit-tests the pointer position, so no target is under it and the drop is
+  delivered to nobody. The real sequence is `started -> entered -> moved -> drop -> ended`.
+
+### Scope, stated plainly
+
+**File drops INTO the app.** Dragging OUT of the app, and rich MIME payloads, would need XDND (X11) or
+`wl_data_device` (Wayland) directly.
+
+And the drop is **injected** in the test, not produced by a real drag: nothing in the harness can act as a
+drag source (`xdotool` cannot, and Debian packages no such tool). What IS exercised is everything downstream
+of the window system: the actual, `rootDragAndDropNode`, Compose's routing, and the UI. The GLFW callback
+that feeds it (`glfwSetDropCallback`) is standard wiring but is **not covered by a test**.
+
+No regressions: X11 (10 assertions), Wayland (7) and ICU (9) all still pass.
+
+### Time spent
+
+- Jalon 12 (this session): ~45 min.
+
 ## Route A1 (full monorepo build): recipe + wall, and the Maven poll
 
 **Maven poll (2026-07-11, 17:45Z):** `org.jetbrains.compose.ui:ui-linuxarm64`,

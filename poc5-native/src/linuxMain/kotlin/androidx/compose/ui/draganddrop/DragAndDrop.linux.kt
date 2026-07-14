@@ -15,27 +15,38 @@
  */
 
 // Modifications Copyright 2026 SkeletonGamer, licensed under the Apache License, Version 2.0.
-// Changed from the original: copied from the Compose macOS/native source set and adapted for the
-// Kotlin/Native Linux (linuxArm64) target (renamed; Apple-only calls removed where present).
+// Changed from the original: the macOS/native source set declares these with private constructors and
+// `positionInRoot` as TODO("Not yet implemented"), which means no DragAndDropEvent can exist at all and
+// drag and drop simply does not work on any Kotlin/Native target. Here they carry real data, so a drop
+// coming from the window system can be delivered to Compose.
+//
+// Scope: file drops INTO the app (what GLFW's drop callback gives us: a list of paths). Dragging OUT of the
+// app, and rich MIME payloads, would need XDND (X11) or wl_data_device (Wayland) directly.
 
 package androidx.compose.ui.draganddrop
 
 import androidx.compose.ui.geometry.Offset
 
 /**
- * A representation of an event sent by the platform during a drag and drop operation.
+ * An event sent by the platform during a drag and drop operation.
+ *
+ * Unlike the macOS actual (which cannot be constructed at all), this one carries what the window system
+ * gave us: where the pointer is, and the files being dropped.
  */
-actual class DragAndDropEvent private constructor()
+actual class DragAndDropEvent internal constructor(
+    internal val position: Offset,
+    /** Absolute paths of the dropped files. Empty while merely hovering. */
+    val files: List<String> = emptyList(),
+)
 
-/**
- * Returns the position of this [DragAndDropEvent] relative to the root Compose View in the
- * layout hierarchy.
- */
+/** Position of this event relative to the root Compose view. */
 internal actual val DragAndDropEvent.positionInRoot: Offset
-    get() = TODO("Not yet implemented")
+    get() = position
 
 /**
- * Definition for a type representing transferable data. It could be a remote URI,
- * rich text data on the clip board, a local file, or more.
+ * Transferable data. Only file paths are carried for now; a richer implementation would model MIME types,
+ * which is what X11 selections and wl_data_device actually exchange.
  */
-actual class DragAndDropTransferData private constructor()
+actual class DragAndDropTransferData(
+    val files: List<String> = emptyList(),
+)

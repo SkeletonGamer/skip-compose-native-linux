@@ -19,6 +19,8 @@ sealed interface InputEvent {
     data class MouseMove(val x: Double, val y: Double) : InputEvent
     data class Resize(val width: Int, val height: Int) : InputEvent
     data class Focus(val focused: Boolean) : InputEvent
+    /** Files dropped onto the window. GLFW gives absolute paths. */
+    data class FileDrop(val paths: List<String>) : InputEvent
 }
 
 object InputQueue {
