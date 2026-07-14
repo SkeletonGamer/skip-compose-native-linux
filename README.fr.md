@@ -12,6 +12,18 @@ vrai `MaterialTheme` + `Button` + `Text` rend et réagit en **Kotlin/Native Linu
 binaire autonome de **35 Mo** utilisant **124 Mo** de RSS, contre **137 Mo / ~224 Mo** pour l'app
 Compose Desktop (JVM) équivalente.
 
+**Et c'est utilisable, pas seulement affiché.** Clavier, souris, molette, survol, curseurs,
+redimensionnement, HiDPI, le vrai presse-papiers système, la locale POSIX avec mise en miroir RTL, les dates
+localisées via ICU, le glisser-déposer de fichiers, et un **IME sous Wayland** (le texte composé arrive dans
+un `TextField`). Ça tourne sur **les deux architectures** (arm64 et x86_64) et sous **X11 comme Wayland avec
+un seul binaire**, sans aucune dépendance au serveur d'affichage au moment du link. Tout est vérifié en
+pilotant l'app avec de vraies entrées, pas en les simulant à l'intérieur du process
+(voir [Reproduire](#reproduire)).
+
+Non implémenté : **l'accessibilité** (aucune cible Kotlin/Native de Compose n'en a, macOS compris). Le rendu
+n'est mesuré qu'en **software GL**, jamais sur un vrai GPU. Et `ui`/`foundation`/`material3` ne sont
+toujours **pas publiés sur Maven** pour Linux : ça compile donc depuis les sources.
+
 Le POC 6 rouvre la seule question que le POC 1 avait close en NO-GO : l'UI Skip (SwiftUI transpilée)
 peut-elle être dé-Android-isée vers Compose Multiplatform ? Il est **fait** sur les deux cibles : d'abord
 CMP Desktop (JVM), puis **Kotlin/Native Linux sans JVM**, où toute la pile Skip transpilée (371 fichiers)

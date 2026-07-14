@@ -12,6 +12,17 @@ Linux device without paying the JVM cost, and at what price?* The answer, measur
 no JVM**, in a **35 MB** self-contained binary using **124 MB** RSS, versus **137 MB / ~224 MB** for
 the equivalent Compose Desktop (JVM) app.
 
+**It is usable, not just rendering.** Keyboard, mouse, wheel, hover, cursors, resize, HiDPI, the real system
+clipboard, the POSIX locale with RTL mirroring, localized dates through ICU, file drag-and-drop, and an
+**IME on Wayland** (composed text lands in a `TextField`). It runs on **both architectures** (arm64 and
+x86_64) and on **X11 and Wayland from a single binary**, with no display-server dependency at link time.
+Everything is verified by driving the running app with real input, not by simulating it in-process
+(see [Reproduce](#reproduce)).
+
+Not implemented: **accessibility** (no Kotlin/Native Compose target has any, macOS included). Rendering is
+measured under **software GL** only, never on a real GPU. And `ui`/`foundation`/`material3` are still
+**not published on Maven** for Linux, so this builds them from source.
+
 POC 6 reopens the one question POC 1 had closed as NO-GO: whether Skip's SwiftUI-transpiled UI can be
 de-Android-ified onto Compose Multiplatform. It is **done** on both targets: first CMP Desktop (JVM), then
 **Kotlin/Native Linux with no JVM**, where the whole transpiled Skip stack (371 files) compiles green and
