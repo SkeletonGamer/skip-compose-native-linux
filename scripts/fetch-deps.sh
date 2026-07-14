@@ -81,6 +81,40 @@ STAGE_X64="$ROOT/.native-stage-x64"
 extract_native linux/arm64 aarch64-linux-gnu "$STAGE"
 extract_native linux/amd64 x86_64-linux-gnu  "$STAGE_X64"
 
+# --- 3. Wayland text-input-v3: headers + protocol bindings (the IME path) ---
+# Under Wayland the app speaks zwp_text_input_v3 to the COMPOSITOR, which relays to the input method; it
+# does not talk to IBus. The protocol code is GENERATED from the XML by wayland-scanner, so none of it is
+# vendored here: headers, the generated .c/.h and libwayland-client are all produced/fetched at setup time.
+WL="$ROOT/poc5-native/native/wayland"
+if [ ! -f "$WL/text-input-v3-client-protocol.h" ]; then
+  echo "[wayland] generating text-input-v3 bindings + staging wayland headers (docker)..."
+  mkdir -p "$WL"
+  docker run --rm --platform linux/arm64 -v "$WL:/out" debian:trixie-slim bash -lc '
+    set -e
+    apt-get update -qq >/dev/null 2>&1
+    apt-get install -y --no-install-recommends libwayland-dev wayland-protocols >/dev/null 2>&1
+    XML=/usr/share/wayland-protocols/unstable/text-input/text-input-unstable-v3.xml
+    wayland-scanner client-header "$XML" /out/text-input-v3-client-protocol.h
+    wayland-scanner private-code  "$XML" /out/text-input-v3-protocol.c
+    cp /usr/include/wayland-client.h /usr/include/wayland-client-core.h \
+       /usr/include/wayland-client-protocol.h /usr/include/wayland-util.h \
+       /usr/include/wayland-version.h /out/
+    cp -aL /usr/lib/aarch64-linux-gnu/libwayland-client.so* /out/
+  ' || { echo "[wayland] ERROR: could not generate the text-input-v3 bindings." >&2; exit 1; }
+fi
+
+# The IME test harness needs input-method-v2, which is a wlroots protocol: NOT in wayland-protocols, and not
+# packaged by Debian. It lives in the wlroots repo. Only the test-side fake IME uses it.
+PROTO="$ROOT/scripts/docker/protocols"
+if [ ! -f "$PROTO/input-method-unstable-v2.xml" ]; then
+  echo "[wayland] fetching the input-method-v2 protocol (wlroots)..."
+  mkdir -p "$PROTO"
+  curl -sSL --max-time 30 -o "$PROTO/input-method-unstable-v2.xml" \
+    "https://raw.githubusercontent.com/swaywm/wlroots/master/protocol/input-method-unstable-v2.xml"
+  grep -q "zwp_input_method_v2" "$PROTO/input-method-unstable-v2.xml" || {
+    echo "[wayland] ERROR: the downloaded input-method XML looks wrong (an HTML error page?)." >&2; exit 1; }
+fi
+
 # Distribute to each native POC that links against GLFW: lib/ = arm64, lib-x64/ = x86_64.
 for p in poc3-native poc4-native poc5-native poc6-native; do
   [ -d "$ROOT/$p" ] || continue
@@ -90,5 +124,9 @@ for p in poc3-native poc4-native poc5-native poc6-native; do
   cp -a "$STAGE/include/glfw3.h" "$STAGE/include/glfw3native.h" \
      "$ROOT/$p/native/glfw/include/GLFW/" 2>/dev/null || true
 done
+
+# libwayland-client goes next to the other libs, so the linker finds -lwayland-client.
+cp -a "$WL"/libwayland-client.so* "$ROOT/poc5-native/native/glfw/lib/" 2>/dev/null || true
+ln -sf libwayland-client.so.0 "$ROOT/poc5-native/native/glfw/lib/libwayland-client.so" 2>/dev/null || true
 
 echo "[done] .cmc + native libs ready. For POC 6 also run 'skip export' (see README)."

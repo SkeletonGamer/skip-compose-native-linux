@@ -137,6 +137,7 @@ the witness app, then de-Android-ifies it with `scripts/patch-export.sh`. Then r
 | POC 5: ICU (runtime dlopen, with and without) | see `scripts/test-icu.sh` |
 | POC 5: native Wayland (wlroots compositor, no X server) | see `scripts/test-wayland.sh` |
 | POC 5: Wayland input automation | see `scripts/test-wayland-input.sh` |
+| POC 5: IME probe (text-input-v3, full loop) | see FINDINGS Jalon 10 |
 
 `run-native.sh` takes an architecture as its third argument (`arm64` by default, or `x64`), so the same
 stack can be run on both Linux architectures: `scripts/run-native.sh poc5-native release x64`.
@@ -171,6 +172,13 @@ input needs its own protocol (`wtype` for the keyboard, `zwlr_virtual_pointer` f
 pointer in particular **cannot** be driven on a headless seat (`capabilities: 0`, no input device attached),
 so those checks report SKIP rather than a fake PASS. They are covered under X11, and the mediator has no
 X11/Wayland branch: it is the same GLFW callback code on both.
+
+**IME (Wayland).** Under Wayland an application does **not** talk to IBus: it speaks `zwp_text_input_v3` to
+the **compositor**, which relays to the input method (`input-method-v2`). The probe binds that protocol on
+the `wl_display` GLFW owns and drives the full loop, verified against a minimal input method written for the
+test: the app's `enable()` wakes the IME up, and the preedit and committed text come back. That `activate`
+is also what makes a **virtual keyboard** appear on mobile. Feeding it into Compose's text field is the next
+step (see FINDINGS, Jalon 10).
 
 Prerequisites (a JDK, Docker, the Skip toolchain), overrides and the full matrix are in
 [`scripts/README.md`](./scripts/README.md).

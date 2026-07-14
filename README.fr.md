@@ -178,6 +178,13 @@ aucun périphérique d'entrée attaché) : ces vérifications rapportent donc SK
 sont couvertes sous X11, et le mediator n'a aucune branche X11/Wayland : c'est le même code de callbacks
 GLFW des deux côtés.
 
+**IME (Wayland).** Sous Wayland, une application ne parle **pas** à IBus : elle parle `zwp_text_input_v3` au
+**compositeur**, qui relaie vers la méthode de saisie (`input-method-v2`). La sonde bind ce protocole sur le
+`wl_display` que possède GLFW et pilote la boucle complète, vérifiée contre une méthode de saisie minimale
+écrite pour le test : le `enable()` de l'app réveille l'IME, et la pré-édition puis le texte validé
+reviennent. Cet `activate` est aussi ce qui fait apparaître un **clavier virtuel** sur mobile. L'injecter
+dans le champ de texte de Compose est l'étape suivante (voir FINDINGS, Jalon 10).
+
 Les prérequis (un JDK, Docker, la chaîne d'outils Skip), les overrides et la matrice complète sont dans
 [`scripts/README.md`](./scripts/README.md).
 

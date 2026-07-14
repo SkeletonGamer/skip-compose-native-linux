@@ -327,6 +327,18 @@ fun main() = runBlocking {
     scene.setContent { App(clipboard) }
     logln("POC5: scene + material3 content set, entering loop")
 
+    // IME probe (Wayland only). Under Wayland the app speaks zwp_text_input_v3 to the COMPOSITOR, which
+    // relays to the input method; it does not talk to IBus directly. This binds the protocol and turns it
+    // on, so preedit/commit events start arriving. Wiring them into Compose's PlatformTextInputService is
+    // the next step; the probe is here to prove the protocol path works at all.
+    if (platformName == "Wayland") {
+        if (waylandime.initWaylandTextInput()) {
+            waylandime.enableWaylandTextInput(cursorX = 16, cursorY = 100, cursorW = 600, cursorH = 60)
+        }
+    } else {
+        logln("POC5: IME probe skipped (not on Wayland; X11 would need XIM or IBus)")
+    }
+
     // Duration: default is the short demo (headless capture). POC5_RUN_SECONDS keeps the window alive so
     // an external driver (xdotool/xclip) can send real X11 input at it.
     val runSeconds = getenv("POC5_RUN_SECONDS")?.toKString()?.toIntOrNull()

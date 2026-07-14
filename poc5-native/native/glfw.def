@@ -1,4 +1,8 @@
-headers = GLFW/glfw3.h
+headers = GLFW/glfw3.h GLFW/glfw3native.h
 package = glfw
 # GLFW pulls GL/gl.h by default; skiko provides its own GL, so skip it.
-compilerOpts = -DGLFW_INCLUDE_NONE
+# GLFW_EXPOSE_NATIVE_WAYLAND: glfw3native.h only declares glfwGetWaylandDisplay/glfwGetWaylandWindow when
+# this is defined. The IME needs both: it must speak zwp_text_input_v3 on the SAME wl_display and wl_surface
+# that GLFW owns. X11 is deliberately NOT exposed here: the binary links no X11 at all (libGL was replaced
+# by libGLESv2 precisely to drop it), and pulling Xlib headers in would bring that dependency back.
+compilerOpts = -DGLFW_INCLUDE_NONE -DGLFW_EXPOSE_NATIVE_WAYLAND

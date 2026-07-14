@@ -638,6 +638,81 @@ requested, because the compositor subtracts its decorations (asked 900x700, app 
 
 - Jalon 9 (this session): ~1 h (GLFW 3.4 bump, trixie image, Wayland harness, regressions).
 
+## Jalon 10: IME probe. The Wayland input-method path works end to end.
+
+The last thing missing from the platform layer is the IME. Without it there is **no virtual keyboard and no
+CJK input**, which on a mobile device means the user cannot type at all. Everything else (clipboard,
+cursors, wheel, locale, RTL) is done; this is not.
+
+### The claim that had to be checked first, and was wrong
+
+I had written that "one IBus client over D-Bus covers X11 and Wayland". **False**, and it mattered: it was
+the basis of a 4-to-6 week estimate.
+
+- **Measured**: our wlroots compositor advertises `zwp_text_input_manager_v3` and
+  `zwp_input_method_manager_v2`. Under Wayland the application speaks **text-input-v3 to the COMPOSITOR**,
+  and the compositor relays to the input method (over input-method-v2). The app does **not** talk to IBus.
+- **Corroborated**: under Wayland the recommended setting is `GTK_IM_MODULE=wayland`, not `ibus`. And
+  JetBrains has the same work open: **JBR-5672**, "Wayland: support input methods (text-input-unstable-v3)".
+
+So there are **two** IME backends, not one: `text-input-v3` (Wayland) and XIM/IBus (X11). The good news is
+that the Wayland one needs **no D-Bus at all**, and if the target is Wayland-only there is only one backend
+to write.
+
+### What the probe proves
+
+The app now binds `zwp_text_input_v3` on the `wl_display` GLFW already owns (`glfwGetWaylandDisplay`),
+opens its own registry to bind the text-input manager and the seat, and drives the protocol. The full loop,
+with a minimal input method written for the test (`scripts/docker/fake-ime.c`, speaking input-method-v2):
+
+    IME  -> registered as the input method for this seat
+    IME  -> activate                      (triggered by OUR app's enable())
+    IME  -> preedit_string 'compo'
+    IME  -> commit_string 'IME-OK'
+
+    APP  <- bound zwp_text_input_manager_v3 + wl_seat
+    APP  <- created zwp_text_input_v3
+    APP  <- enable + commit sent
+    APP  <- enter                         (compositor gave this surface text focus)
+    APP  <- preedit_string='compo'        (text being composed)
+    APP  <- commit_string='IME-OK'        (text the IME committed)
+
+app -> text-input-v3 -> compositor -> input-method-v2 -> IME -> back to the app. And it is not the app's own
+log that proves it: `WAYLAND_DEBUG=1` shows the messages on the wire:
+
+    -> wl_registry#34.bind(21, "zwp_text_input_manager_v3", 1, new id #35)
+    -> zwp_text_input_manager_v3#35.get_text_input(new id zwp_text_input_v3#29, wl_seat#36)
+    -> zwp_text_input_v3#29.enable()
+    -> zwp_text_input_v3#29.set_cursor_rectangle(16, 100, 600, 60)
+    -> zwp_text_input_v3#29.commit()
+
+**For a mobile target, the key line is `activate`**: our `enable()` is what wakes the input method up. That
+is the same mechanism that makes a **virtual keyboard** appear, and `maliit-keyboard`, `squeekboard` and
+`wvkbd` all speak this same input-method-v2.
+
+### Three traps, all in the test scaffolding, none in the real path
+
+- The `input-method-v2` XML is **not** in `wayland-protocols`: it is a wlroots protocol, and Debian does not
+  package it. It lives in the wlroots repo. Two plausible URLs returned an **HTML error page**, which would
+  have been fed to wayland-scanner as if it were a protocol.
+- The `serial` passed to `zwp_input_method_v2.commit()` must be **the serial of the `done` event received**,
+  not a counter of one's own. Get it wrong and the compositor **silently drops the request**: the first run
+  sent the preedit and lost the commit_string, with no error anywhere.
+- The compositor emits `done` **only when state changes**. Waiting for a second `done` waits forever; a real
+  IME gets one per keystroke.
+
+### What is NOT done
+
+The app **receives** the preedit and the commit, but does **not insert them into the text field** yet: the
+`TextField` does not move. Wiring that up means implementing Compose's `PlatformTextInputService` (start/stop
+input, feed the real cursor rectangle, render the preedit underlined), which is Compose work, not Wayland
+work. **Estimated 8 to 15 days**, and the main technical risk is now retired. X11 (XIM or IBus) would be a
+separate backend on top.
+
+### Time spent
+
+- Jalon 10 (this session): ~1 h 30 (cinterop, text-input-v3 client, test input method, full loop).
+
 ## Route A1 (full monorepo build): recipe + wall, and the Maven poll
 
 **Maven poll (2026-07-11, 17:45Z):** `org.jetbrains.compose.ui:ui-linuxarm64`,
