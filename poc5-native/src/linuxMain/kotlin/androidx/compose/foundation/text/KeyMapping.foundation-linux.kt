@@ -20,4 +20,6 @@
 
 package androidx.compose.foundation.text
 
-internal actual val platformDefaultKeyMapping: KeyMapping = createMacOsDefaultKeyMapping()
+// Ctrl-based, not Cmd-based: this is the mapping Compose Desktop uses on Linux and Windows. The macOS
+// mapping put every text-editing shortcut behind Meta, so Ctrl+C / Ctrl+V / Ctrl+A did nothing here.
+internal actual val platformDefaultKeyMapping: KeyMapping = createWindowsDefaultKeyMapping()

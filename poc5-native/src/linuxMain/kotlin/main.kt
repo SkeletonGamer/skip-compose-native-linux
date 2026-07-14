@@ -1,25 +1,43 @@
-// POC 5 Jalon 4: the real `ui-glfw` mediator. Drives an actual JetBrains `ComposeScene` (compiled for
-// Kotlin/Native Linux at Jalons 2-3) into a GLFW window via a skiko GL surface, no JVM. The content is
-// real material3 (MaterialTheme + Button + Text), not the hand-written stand-in of POC 4.
+// POC 5 Jalon 4/6: the real `ui-glfw` mediator. Drives an actual JetBrains `ComposeScene` (compiled for
+// Kotlin/Native Linux at Jalons 2-3) into a GLFW window via a skiko GL surface, no JVM.
+//
+// Lot 1 turns this from a render demo into a usable window: real keyboard, mouse wheel, hover, cursors,
+// resize, HiDPI and a real monotonic clock, all fed from GLFW callbacks. The content exercises each of
+// them (a text field to type into, a scrollable list, a copy button that writes to the system clipboard).
 @file:OptIn(
     kotlinx.cinterop.ExperimentalForeignApi::class,
     androidx.compose.ui.ExperimentalComposeUiApi::class,
+    androidx.compose.ui.InternalComposeUiApi::class,
 )
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.pointer.LinuxCursor
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
@@ -28,30 +46,30 @@ import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import glfw.GLFW_MOUSE_BUTTON_LEFT
-import glfw.GLFW_PRESS
-import glfw.GLFW_TRUE
-import glfw.GLFW_VISIBLE
-import glfw.glfwCreateWindow
-import glfw.glfwDestroyWindow
-import glfw.glfwGetCursorPos
-import glfw.glfwGetMouseButton
-import glfw.glfwInit
-import glfw.glfwMakeContextCurrent
-import glfw.glfwPollEvents
-import glfw.glfwSwapBuffers
-import glfw.glfwSwapInterval
-import glfw.glfwTerminate
-import glfw.glfwWindowHint
-import glfw.glfwWindowShouldClose
+import androidx.compose.runtime.rememberCoroutineScope
+import glfw.*
+import glfwinput.InputEvent
+import glfwinput.InputQueue
+import glfwinput.glfwKeyToCompose
+import glfwinput.hasAlt
+import glfwinput.hasCtrl
+import glfwinput.hasShift
+import glfwinput.hasSuper
+import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.DoubleVar
+import kotlinx.cinterop.FloatVar
+import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
+import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import linuxglfw.GlfwBridge
+import linuxglfw.LinuxCursorKind
 import org.jetbrains.skia.BackendRenderTarget
 import org.jetbrains.skia.ColorSpace
 import org.jetbrains.skia.DirectContext
@@ -60,26 +78,70 @@ import org.jetbrains.skia.Image
 import org.jetbrains.skia.Surface
 import org.jetbrains.skia.SurfaceColorFormat
 import org.jetbrains.skia.SurfaceOrigin
+import platform.posix.CLOCK_MONOTONIC
+import platform.posix.clock_gettime
+import platform.posix.getenv
+import platform.posix.timespec
 import platform.posix.usleep
+import kotlinx.cinterop.toKString
 
 private const val GL_RGBA8 = 0x8058
+private const val WHITE = 0xFFFFFFFF.toInt()
 
 // stdout is block-buffered when redirected (no TTY); flush so progress is visible live.
 private fun logln(msg: String) { println(msg); platform.posix.fflush(null) }
 
-// The composed UI: real material3 driven by the real ComposeScene.
+/** Real monotonic time. The old loop used `frame * 16ms`, so animations advanced in frames, not seconds. */
+private fun nowNanos(): Long = memScoped {
+    val ts = alloc<timespec>()
+    clock_gettime(CLOCK_MONOTONIC, ts.ptr)
+    ts.tv_sec * 1_000_000_000L + ts.tv_nsec
+}
+
+// The composed UI. Every widget here exists to exercise one thing Lot 1 wires up.
 @Composable
-private fun App() {
+private fun App(clipboard: Clipboard) {
     var count by remember { mutableStateOf(0) }
+    var text by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
     MaterialTheme {
-        Column(androidx.compose.ui.Modifier.padding(24.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Text("Compose material3 on Kotlin/Native Linux, no JVM")
-            Button(onClick = { count++ }, modifier = androidx.compose.ui.Modifier.padding(top = 16.dp)) {
-                Text("count: $count")
+
+            // Keyboard: typing here proves glfwSetCharCallback -> scene.sendKeyEvent -> Compose.
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("type here") },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            // Echoed so a screenshot can prove what was typed.
+            Text("typed: [$text]", modifier = Modifier.padding(top = 4.dp))
+
+            Row(Modifier.padding(top = 8.dp)) {
+                Button(onClick = { count++ }) { Text("count: $count") }
+                // Clipboard: writes to the real X11/Wayland clipboard via GLFW.
+                Button(
+                    onClick = { scope.launch { clipboard.setClipEntry(clipEntryOf("copied:$text")) } },
+                    modifier = Modifier.padding(start = 8.dp),
+                ) { Text("copy") }
+            }
+
+            // Scroll: the mouse wheel must move this. Both the ScrollConfig and the GLFW scroll
+            // callback had to exist for this to work; either one missing means it stays at 0.
+            Text("first visible item: ${listState.firstVisibleItemIndex}", Modifier.padding(top = 8.dp))
+            LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().height(120.dp)) {
+                items((1..40).toList()) { i -> Text("item $i", Modifier.padding(4.dp)) }
             }
         }
     }
 }
+
+// Small helper: ClipEntry's factory is @ExperimentalComposeUiApi and lives on the companion.
+private fun clipEntryOf(text: String) =
+    androidx.compose.ui.platform.ClipEntry.withPlainText(text)
 
 private fun writePng(surface: Surface, width: Int, height: Int, path: String) {
     val bmp = org.jetbrains.skia.Bitmap().apply { allocN32Pixels(width, height) }
@@ -89,12 +151,36 @@ private fun writePng(surface: Surface, width: Int, height: Int, path: String) {
     val f = platform.posix.fopen(path, "wb") ?: return
     bytes.usePinned { platform.posix.fwrite(it.addressOf(0), 1u, bytes.size.toULong(), f) }
     platform.posix.fclose(f)
-    println("wrote $path (${bytes.size} bytes)")
+    logln("wrote $path (${bytes.size} bytes)")
+}
+
+// --- GLFW callbacks. staticCFunction captures nothing, so they only touch the global InputQueue. ---
+
+private val keyCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Int, Int, Int, Int, Unit> { _, key, _, action, mods ->
+    InputQueue.push(InputEvent.KeyPress(key, action, mods))
+}
+private val charCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, UInt, Unit> { _, codepoint ->
+    InputQueue.push(InputEvent.Typed(codepoint.toInt()))
+}
+private val scrollCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Double, Double, Unit> { _, dx, dy ->
+    InputQueue.push(InputEvent.Scroll(dx, dy))
+}
+private val mouseBtnCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Int, Int, Int, Unit> { _, button, action, _ ->
+    InputQueue.push(InputEvent.MouseButton(button, action))
+}
+private val cursorPosCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Double, Double, Unit> { _, x, y ->
+    InputQueue.push(InputEvent.MouseMove(x, y))
+}
+private val fbSizeCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Int, Int, Unit> { _, w, h ->
+    InputQueue.push(InputEvent.Resize(w, h))
+}
+private val focusCb = staticCFunction<CPointer<cnames.structs.GLFWwindow>?, Int, Unit> { _, focused ->
+    InputQueue.push(InputEvent.Focus(focused == GLFW_TRUE))
 }
 
 fun main() = runBlocking {
-    val width = 520
-    val height = 300
+    var width = 640
+    var height = 480
 
     logln("POC5: start")
     if (glfwInit() == 0) { logln("glfwInit failed (no display?)"); return@runBlocking }
@@ -106,84 +192,209 @@ fun main() = runBlocking {
     glfwSwapInterval(0)
     logln("POC5: window + GL context ok")
 
+    // Publish the window + cursors so the compose actuals (clipboard, pointer icon) can reach them.
+    GlfwBridge.window = window
+    GlfwBridge.cursors = mapOf(
+        LinuxCursorKind.Default to glfwCreateStandardCursor(GLFW_ARROW_CURSOR),
+        LinuxCursorKind.Text to glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),
+        LinuxCursorKind.Hand to glfwCreateStandardCursor(GLFW_HAND_CURSOR),
+        LinuxCursorKind.Crosshair to glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR),
+    )
+
+    glfwSetKeyCallback(window, keyCb)
+    glfwSetCharCallback(window, charCb)
+    glfwSetScrollCallback(window, scrollCb)
+    glfwSetMouseButtonCallback(window, mouseBtnCb)
+    glfwSetCursorPosCallback(window, cursorPosCb)
+    glfwSetFramebufferSizeCallback(window, fbSizeCb)
+    glfwSetWindowFocusCallback(window, focusCb)
+    logln("POC5: glfw callbacks wired (key, char, scroll, mouse, move, resize, focus)")
+
+    // HiDPI: the framebuffer can be larger than the window. Density(1f) used to be hardcoded, so the UI
+    // was drawn at 1x on a 2x screen.
+    val contentScale = memScoped {
+        val sx = alloc<FloatVar>()
+        val sy = alloc<FloatVar>()
+        glfwGetWindowContentScale(window, sx.ptr, sy.ptr)
+        if (sx.value > 0f) sx.value else 1f
+    }
+    memScoped {
+        val fw = alloc<IntVar>(); val fh = alloc<IntVar>()
+        glfwGetFramebufferSize(window, fw.ptr, fh.ptr)
+        if (fw.value > 0) { width = fw.value; height = fh.value }
+    }
+    logln("POC5: content scale = $contentScale, framebuffer = ${width}x$height")
+
     val context = DirectContext.makeGL()
-    val renderTarget = BackendRenderTarget.makeGL(width, height, 0, 8, 0, GL_RGBA8)
-    val surface = Surface.makeFromBackendRenderTarget(
+
+    // Surface + render target are recreated on resize; hold them in vars.
+    var renderTarget = BackendRenderTarget.makeGL(width, height, 0, 8, 0, GL_RGBA8)
+    var surface = Surface.makeFromBackendRenderTarget(
         context, renderTarget, SurfaceOrigin.BOTTOM_LEFT, SurfaceColorFormat.RGBA_8888, ColorSpace.sRGB,
     ) ?: run { logln("skiko surface null"); return@runBlocking }
-    val composeCanvas = surface.canvas.asComposeCanvas()
+    var composeCanvas = surface.canvas.asComposeCanvas()
     logln("POC5: skiko GL surface ok")
 
-    // Mediator wiring: FrameRecomposer + PlatformContext (window info) + the real ComposeScene.
-    val density = Density(1f)
-    val size = IntSize(width, height)
+    val density = Density(contentScale)
     val winInfo = WindowInfoImpl().apply {
         isWindowFocused = true
-        containerSize = size
+        containerSize = IntSize(width, height)
     }
+    // setPointerIcon is what makes the cursor actually change shape over a text field or a button.
     val platformContext = object : PlatformContext by PlatformContext.Empty() {
         override val windowInfo: WindowInfo get() = winInfo
+        override fun setPointerIcon(pointerIcon: PointerIcon) {
+            val kind = (pointerIcon as? LinuxCursor)?.kind ?: LinuxCursorKind.Default
+            glfwSetCursor(window, GlfwBridge.cursors[kind])
+            logln("POC5: cursor -> $kind")
+        }
     }
     val frameRecomposer = FrameRecomposer(coroutineContext)
     val scene = CanvasLayersComposeScene(
         frameRecomposer = frameRecomposer,
         density = density,
-        size = size,
+        size = IntSize(width, height),
         platformContext = platformContext,
     )
-    scene.setContent { App() }
+
+    // createPlatformClipboard() is `internal` to compose.ui, and the mediator is compiled into the same
+    // module (that is the whole point of the extract-and-compile route), so it is reachable from here.
+    val clipboard = androidx.compose.ui.platform.createPlatformClipboard()
+    scene.setContent { App(clipboard) }
     logln("POC5: scene + material3 content set, entering loop")
 
+    // Duration: default is the short demo (headless capture). POC5_RUN_SECONDS keeps the window alive so
+    // an external driver (xdotool/xclip) can send real X11 input at it.
+    val runSeconds = getenv("POC5_RUN_SECONDS")?.toKString()?.toIntOrNull()
+    val startNanos = nowNanos()
+    val deadlineNanos = runSeconds?.let { startNanos + it * 1_000_000_000L }
+    val maxFrames = if (runSeconds == null) 120 else Int.MAX_VALUE
+    val headless = runSeconds == null
+
     var frame = 0
-    val maxFrames = 120
-    var wasDown = false
+    var cursorX = 0.0
+    var cursorY = 0.0
+
     while (glfwWindowShouldClose(window) == 0 && frame < maxFrames) {
-        // Input: left-click edge -> Press then Release at the cursor position (drives material3 Button).
-        val down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS
-        if (down != wasDown) {
-            memScoped {
-                val xp = alloc<DoubleVar>()
-                val yp = alloc<DoubleVar>()
-                glfwGetCursorPos(window, xp.ptr, yp.ptr)
-                val pos = Offset(xp.value.toFloat(), yp.value.toFloat())
-                scene.sendPointerEvent(
-                    eventType = if (down) PointerEventType.Press else PointerEventType.Release,
-                    position = pos,
-                    button = PointerButton.Primary,
-                )
+        if (deadlineNanos != null && nowNanos() > deadlineNanos) break
+
+        // Replay everything GLFW handed us since the last frame into Compose.
+        for (event in InputQueue.drain()) {
+            when (event) {
+                is InputEvent.MouseMove -> {
+                    cursorX = event.x; cursorY = event.y
+                    // Hover: without a Move event, buttons never highlight and the cursor never changes.
+                    scene.sendPointerEvent(PointerEventType.Move, Offset(cursorX.toFloat(), cursorY.toFloat()))
+                }
+                is InputEvent.MouseButton -> {
+                    val type = if (event.action == GLFW_PRESS) PointerEventType.Press else PointerEventType.Release
+                    val button = when (event.button) {
+                        GLFW_MOUSE_BUTTON_RIGHT -> PointerButton.Secondary
+                        GLFW_MOUSE_BUTTON_MIDDLE -> PointerButton.Tertiary
+                        else -> PointerButton.Primary
+                    }
+                    scene.sendPointerEvent(type, Offset(cursorX.toFloat(), cursorY.toFloat()), button = button)
+                }
+                is InputEvent.Scroll -> {
+                    scene.sendPointerEvent(
+                        eventType = PointerEventType.Scroll,
+                        position = Offset(cursorX.toFloat(), cursorY.toFloat()),
+                        scrollDelta = Offset(-event.dx.toFloat(), -event.dy.toFloat()),
+                    )
+                    logln("POC5: scroll dy=${event.dy} at ($cursorX,$cursorY)")
+                }
+                is InputEvent.KeyPress -> {
+                    // Non-printable keys and shortcuts. Printable characters arrive via Typed below with
+                    // their code point; sending them here with codePoint 0 would not count as typed.
+                    val type = when (event.action) {
+                        GLFW_RELEASE -> KeyEventType.KeyUp
+                        else -> KeyEventType.KeyDown // PRESS and REPEAT
+                    }
+                    scene.sendKeyEvent(
+                        KeyEvent(
+                            key = glfwKeyToCompose(event.key),
+                            type = type,
+                            codePoint = 0,
+                            isCtrlPressed = event.mods.hasCtrl(),
+                            isMetaPressed = event.mods.hasSuper(),
+                            isAltPressed = event.mods.hasAlt(),
+                            isShiftPressed = event.mods.hasShift(),
+                        )
+                    )
+                }
+                is InputEvent.Typed -> {
+                    // A real character. Compose's isTypedEvent looks at utf16CodePoint, so this is what
+                    // actually inserts text into a field.
+                    scene.sendKeyEvent(
+                        KeyEvent(
+                            key = androidx.compose.ui.input.key.Key.Unknown,
+                            type = KeyEventType.KeyDown,
+                            codePoint = event.codePoint,
+                        )
+                    )
+                    logln("POC5: typed codepoint=${event.codePoint}")
+                }
+                is InputEvent.Focus -> winInfo.isWindowFocused = event.focused
+                is InputEvent.Resize -> {
+                    if (event.width > 0 && event.height > 0 && (event.width != width || event.height != height)) {
+                        width = event.width; height = event.height
+                        // Surface and render target are bound to the old size: rebuild them, then tell
+                        // Compose. Skipping any of these three left the old rendering stretched.
+                        surface.close(); renderTarget.close()
+                        renderTarget = BackendRenderTarget.makeGL(width, height, 0, 8, 0, GL_RGBA8)
+                        surface = Surface.makeFromBackendRenderTarget(
+                            context, renderTarget, SurfaceOrigin.BOTTOM_LEFT,
+                            SurfaceColorFormat.RGBA_8888, ColorSpace.sRGB,
+                        ) ?: break
+                        composeCanvas = surface.canvas.asComposeCanvas()
+                        scene.size = IntSize(width, height)
+                        winInfo.containerSize = IntSize(width, height)
+                        logln("POC5: resized to ${width}x$height")
+                    }
+                }
             }
         }
-        wasDown = down
 
-        // Headless (Xvfb) has no real mouse: inject a synthetic click at the Button center to prove
-        // the real material3 Button's onClick fires through the real hit-testing + layout (count 0 -> 1).
-        val buttonCenter = Offset(90f, 88f)
-        if (frame == 40) scene.sendPointerEvent(PointerEventType.Press, buttonCenter, button = PointerButton.Primary)
-        if (frame == 44) {
-            scene.sendPointerEvent(PointerEventType.Release, buttonCenter, button = PointerButton.Primary)
-            logln("POC5: injected synthetic click on the material3 Button")
+        // Headless demo: no real mouse, so inject a click on the count button to prove hit-testing.
+        if (headless) {
+            val buttonCenter = Offset(60f, 210f)
+            if (frame == 40) scene.sendPointerEvent(PointerEventType.Press, buttonCenter, button = PointerButton.Primary)
+            if (frame == 44) {
+                scene.sendPointerEvent(PointerEventType.Release, buttonCenter, button = PointerButton.Primary)
+                logln("POC5: injected synthetic click on the material3 Button")
+            }
         }
 
-        // One Compose frame: drain due postDelayed callbacks (RectManager debounce) on this thread,
-        // then advance recomposition, layout, and draw into the skiko canvas.
-        val frameNanos = frame.toLong() * 16_000_000L
+        val frameNanos = nowNanos()
         androidx.compose.ui.drivePostDelayed(frameNanos)
         frameRecomposer.performFrame(frameNanos)
         scene.measureAndLayout()
-        composeCanvas.let { scene.draw(it) }
+        // Clear first: Compose only paints what it owns, so without this every frame is drawn on top of
+        // the last one. A static screen hides it; a text field or a scrolling list turns into mush.
+        surface.canvas.clear(WHITE)
+        scene.draw(composeCanvas)
         context.flush()
         glfwSwapBuffers(window)
         glfwPollEvents()
 
-        if (frame % 20 == 0) logln("POC5: frame $frame")
-        if (frame == 5) writePng(surface, width, height, "/out/poc5-material3-before.png")
-        if (frame == maxFrames - 5) writePng(surface, width, height, "/out/poc5-material3-after.png")
+        if (headless) {
+            if (frame % 20 == 0) logln("POC5: frame $frame")
+            if (frame == 5) writePng(surface, width, height, "/out/poc5-material3-before.png")
+            if (frame == maxFrames - 5) writePng(surface, width, height, "/out/poc5-material3-after.png")
+        } else if (frame % 120 == 0) {
+            // Interactive run: keep dumping the current state so the test driver can capture it.
+            writePng(surface, width, height, "/out/poc5-live.png")
+        }
         usleep(8_000u)
         frame++
     }
-    println("POC5 Jalon 4: real material3 ComposeScene on K/N Linux, no JVM")
+
+    // Final frame for the interactive run: what the UI looked like after all the injected input.
+    if (!headless) writePng(surface, width, height, "/out/poc5-final.png")
+    logln("POC5: exiting after $frame frames")
 
     scene.close()
     frameRecomposer.close()
-    surface.close(); context.close(); glfwDestroyWindow(window); glfwTerminate()
+    surface.close(); renderTarget.close(); context.close()
+    glfwDestroyWindow(window); glfwTerminate()
 }

@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1-mesa-dri libglx-mesa0 libgl1 libegl1 libgles2 \
         libfontconfig1 libfreetype6 fonts-dejavu-core \
         ca-certificates \
+        xdotool xclip x11-utils \
     && rm -rf /var/lib/apt/lists/*
+# xdotool/xclip/xwininfo drive the interactive test (scripts/test-input.sh): they inject REAL X11 key,
+# wheel and pointer events at the window and read back the real system clipboard, so the test exercises
+# the whole X11 -> GLFW -> Compose chain rather than the app talking to itself.
 
 ENV LIBGL_ALWAYS_SOFTWARE=1
 ENV GALLIUM_DRIVER=llvmpipe

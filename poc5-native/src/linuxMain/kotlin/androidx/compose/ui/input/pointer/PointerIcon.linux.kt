@@ -1,11 +1,13 @@
-// POC 5: actuals Linux pour les icônes de curseur. Pas de bibliothèque de curseur native
-// ici (le mediator GLFW fixera le curseur via glfwSetCursor). Stubs marqueurs suffisants
-// pour compiler ui:ui : chaque icône est un objet distinct identifiable.
+// Linux cursor actuals. Each icon carries the shape Compose asks for; the GLFW mediator turns it into a
+// real cursor via glfwSetCursor (see PlatformContext.setPointerIcon in main.kt). Keeping the GLFW call in
+// the mediator rather than here lets these stay comparable value objects.
 package androidx.compose.ui.input.pointer
 
-private data class LinuxCursor(val kind: String) : PointerIcon
+import linuxglfw.LinuxCursorKind
 
-internal actual val pointerIconDefault: PointerIcon = LinuxCursor("default")
-internal actual val pointerIconCrosshair: PointerIcon = LinuxCursor("crosshair")
-internal actual val pointerIconText: PointerIcon = LinuxCursor("text")
-internal actual val pointerIconHand: PointerIcon = LinuxCursor("hand")
+internal data class LinuxCursor(val kind: LinuxCursorKind) : PointerIcon
+
+internal actual val pointerIconDefault: PointerIcon = LinuxCursor(LinuxCursorKind.Default)
+internal actual val pointerIconCrosshair: PointerIcon = LinuxCursor(LinuxCursorKind.Crosshair)
+internal actual val pointerIconText: PointerIcon = LinuxCursor(LinuxCursorKind.Text)
+internal actual val pointerIconHand: PointerIcon = LinuxCursor(LinuxCursorKind.Hand)

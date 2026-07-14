@@ -15,14 +15,11 @@
  */
 
 // Modifications Copyright 2026 SkeletonGamer, licensed under the Apache License, Version 2.0.
-// Changed from the original: copied from the Compose macOS/native source set and adapted for the
-// Kotlin/Native Linux (linuxArm64) target (renamed; Apple-only calls removed where present).
-
-// Modifications: Copyright 2026 SkeletonGamer, licensed under Apache-2.0.
-// Renamed from the original androidx MacosScrollable.macos.kt and changed for the
-// Kotlin/Native Linux target: the AppKit mouse-wheel ScrollConfig (which read
-// appkitEventOrNull) is replaced by a Linux stub returning Offset.Zero, to be fed
-// by the ui-glfw mediator.
+// Changed from the original: the AppKit mouse-wheel ScrollConfig (which read appkitEventOrNull) is
+// replaced by the Linux scroll formula, taken from JetBrains' own LinuxGnomeConfig (foundation
+// desktopMain, DesktopScrollable.desktop.kt), which they derived experimentally from Ubuntu Nautilus.
+// AWT reports how many lines a wheel notch scrolls (MouseWheelEvent.scrollAmount); GLFW does not, so
+// SCROLL_LINES_PER_NOTCH stands in for it (3 is the X11/GTK default).
 
 package androidx.compose.foundation.gestures
 
@@ -31,13 +28,20 @@ import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
+import kotlin.math.sqrt
 
-// POC 5 Jalon 3: macOS lit l'événement AppKit natif (deltas de molette). Ici le mediator ui-glfw
-// fournira les deltas ; ce stub compile et renvoie zéro tant que le mediator n'est pas branché.
+private const val SCROLL_LINES_PER_NOTCH = 3f
+
 internal actual fun CompositionLocalConsumerModifierNode.platformScrollConfig(): ScrollConfig =
     LinuxScrollConfig
 
 private object LinuxScrollConfig : ScrollConfig {
-    override fun Density.calculateMouseWheelScroll(event: PointerEvent, bounds: IntSize): Offset =
-        Offset.Zero // TODO mediator ui-glfw : convertir les deltas de molette GLFW.
+    override fun Density.calculateMouseWheelScroll(event: PointerEvent, bounds: IntSize): Offset {
+        var delta = Offset.Zero
+        for (change in event.changes) delta += change.scrollDelta
+        return Offset(
+            x = delta.x * sqrt(bounds.width.toFloat()),
+            y = delta.y * sqrt(bounds.height.toFloat()),
+        ) * -SCROLL_LINES_PER_NOTCH
+    }
 }

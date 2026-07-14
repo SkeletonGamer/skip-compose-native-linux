@@ -21,19 +21,15 @@
 package androidx.compose.foundation.text.selection
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
 
-// this doesn't sounds very sustainable
-// it would end up being a function for any conceptual keyevent (selectall, cut, copy, paste)
-// TODO(b/1564937)
+// Ctrl+C on Linux (the desktop backend branches on DesktopPlatform; here the platform is always Linux).
+// This used to be TODO(), which threw NotImplementedError as soon as a key reached a SelectionContainer.
 internal actual fun isCopyKeyEvent(keyEvent: KeyEvent): Boolean =
-    TODO("implement native isCopyKeyEvent")
-/*
-    keyEvent.key == Key.C && when (DesktopPlatform.Current) {
-        DesktopPlatform.MacOS -> keyEvent.isMetaPressed
-        else -> keyEvent.isCtrlPressed
-    } || keyEvent.key == Key.Copy
-*/
+    (keyEvent.key == Key.C && keyEvent.isCtrlPressed) || keyEvent.key == Key.Copy
 
 /**
  * Magnification is not supported on desktop.
