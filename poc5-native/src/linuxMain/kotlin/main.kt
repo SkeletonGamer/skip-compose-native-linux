@@ -29,6 +29,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.KeyEvent
@@ -123,11 +125,19 @@ private fun App(clipboard: Clipboard) {
             Text("date: ${localizedDateSample(locale)}", Modifier.padding(top = 2.dp))
 
             // Keyboard: typing here proves glfwSetCharCallback -> scene.sendKeyEvent -> Compose.
+            // The field takes focus on start. That is what makes Compose call startInput() on our
+            // PlatformTextInputService, which enables the Wayland IME. It also matters for the test: under
+            // a headless compositor there is no pointer, so the field could never be clicked into.
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 label = { Text("type here") },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("field"),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    .focusRequester(focusRequester)
+                    .testTag("field"),
             )
             // Echoed so a screenshot can prove what was typed.
             Text("typed: [$text]", modifier = Modifier.padding(top = 4.dp))
@@ -280,9 +290,20 @@ fun main() = runBlocking {
         isWindowFocused = true
         containerSize = IntSize(width, height)
     }
+    // The IME. Compose calls startInput() on this when a text field takes focus, which is what enables the
+    // Wayland text-input protocol (and, on a phone, raises the virtual keyboard). Without handing it to the
+    // PlatformContext, Compose keeps using EmptyPlatformTextInputService and no IME can ever engage.
+    val textInput = waylandime.LinuxTextInputService()
+
     // setPointerIcon is what makes the cursor actually change shape over a text field or a button.
     val platformContext = object : PlatformContext by PlatformContext.Empty() {
         override val windowInfo: WindowInfo get() = winInfo
+        // The MODERN text-input contract. material3's TextField goes through this, not the legacy
+        // PlatformTextInputService: implementing only the legacy one gave a focused field whose IME never
+        // engaged, because the default startInputMethod here is awaitCancellation().
+        override suspend fun startInputMethod(
+            request: androidx.compose.ui.platform.PlatformTextInputMethodRequest
+        ): Nothing = textInput.startInputMethod(request)
         override fun setPointerIcon(pointerIcon: PointerIcon) {
             val kind = (pointerIcon as? LinuxCursor)?.kind ?: LinuxCursorKind.Default
             glfwSetCursor(window, GlfwBridge.cursors[kind])
@@ -323,21 +344,18 @@ fun main() = runBlocking {
 
     // createPlatformClipboard() is `internal` to compose.ui, and the mediator is compiled into the same
     // module (that is the whole point of the extract-and-compile route), so it is reachable from here.
+    // Bind the IME protocol BEFORE composing. Compose focuses the text field during setContent, which
+    // starts an input session immediately: if the protocol is not bound yet, that enable() lands on
+    // nothing and the IME never engages (observed exactly that way).
+    if (platformName == "Wayland") {
+        waylandime.initWaylandTextInput()
+    } else {
+        logln("POC5: IME not wired (not on Wayland; X11 would need a separate XIM/IBus backend)")
+    }
+
     val clipboard = androidx.compose.ui.platform.createPlatformClipboard()
     scene.setContent { App(clipboard) }
     logln("POC5: scene + material3 content set, entering loop")
-
-    // IME probe (Wayland only). Under Wayland the app speaks zwp_text_input_v3 to the COMPOSITOR, which
-    // relays to the input method; it does not talk to IBus directly. This binds the protocol and turns it
-    // on, so preedit/commit events start arriving. Wiring them into Compose's PlatformTextInputService is
-    // the next step; the probe is here to prove the protocol path works at all.
-    if (platformName == "Wayland") {
-        if (waylandime.initWaylandTextInput()) {
-            waylandime.enableWaylandTextInput(cursorX = 16, cursorY = 100, cursorW = 600, cursorH = 60)
-        }
-    } else {
-        logln("POC5: IME probe skipped (not on Wayland; X11 would need XIM or IBus)")
-    }
 
     // Duration: default is the short demo (headless capture). POC5_RUN_SECONDS keeps the window alive so
     // an external driver (xdotool/xclip) can send real X11 input at it.
@@ -440,6 +458,10 @@ fun main() = runBlocking {
                 logln("POC5: injected synthetic click on the material3 Button")
             }
         }
+
+        // Turn what the IME sent into Compose edits. The Wayland listeners are staticCFunction and cannot
+        // call into Compose, so they queue; this drains the queue on the compose thread.
+        textInput.drain()
 
         val frameNanos = nowNanos()
         androidx.compose.ui.drivePostDelayed(frameNanos)

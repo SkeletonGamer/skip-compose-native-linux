@@ -745,6 +745,70 @@ d'être levé. X11 (XIM ou IBus) serait un backend séparé par-dessus.
 - Jalon 10 (cette session) : ~1 h 30 (cinterop, client text-input-v3, méthode de saisie de test, boucle
   complète).
 
+## Jalon 11 : le texte de l'IME atterrit dans le champ Compose
+
+Le Jalon 10 prouvait la boucle du protocole : l'app reçoit ce que l'IME compose et valide. Mais le texte
+n'allait nulle part, car rien ne l'injectait dans Compose. Ce jalon comble ce trou : **le texte de l'IME
+apparaît désormais dans le `TextField`**.
+
+Le texte validé par l'IME (`IME-OK`) et sa pré-édition (`compo`, rendue soulignée, ce qui est la façon dont
+Compose affiche un texte en cours de composition) sont tous deux dans le champ, et l'état de Compose le
+confirme : `typed: [IME-OKcompo]`.
+
+Capture : `docs/poc5-ime-wayland-textfield.png`.
+
+### Compose a DEUX contrats de saisie, et choisir le mauvais échoue en silence
+
+C'est le piège, et il a coûté trois itérations :
+
+- le **legacy** `PlatformTextInputService` (`startInput` / `stopInput`), et
+- le **moderne** `PlatformContext.startInputMethod(request)`, une fonction `suspend` qui retourne `Nothing`.
+
+**Le `TextField` de material3 passe par le moderne.** N'implémenter que le legacy donne un champ de texte
+qui prend le focus, affiche son curseur, et n'active jamais l'IME. Sans la moindre erreur nulle part :
+l'implémentation par défaut de `startInputMethod` est `awaitCancellation()`, donc elle suspend simplement
+pour toujours.
+
+Ce qui a rendu l'erreur visible : **`stopInput()` était appelé et `startInput()` jamais.** Compose parlait
+bien au service, mais pas par la méthode qui compte.
+
+Le contrat moderne est de toute façon le bon : il porte `onEditCommand` (par où le texte entre) et
+`focusedRectInRoot` (où placer la fenêtre de candidats ou le clavier virtuel).
+
+### Le branchement, et les deux bugs d'ordre qu'il a révélés
+
+`LinuxTextInputService.startInputMethod` stocke `onEditCommand`, active le text-input Wayland avec le
+rectangle du curseur, puis suspend jusqu'à ce que Compose annule la session (le champ a perdu le focus), en
+désactivant l'IME dans le `finally`. Le texte validé devient un `CommitTextCommand` ; la pré-édition devient
+un `SetComposingTextCommand`, que Compose rend souligné et remplace à la mise à jour suivante.
+
+Les listeners Wayland sont des `staticCFunction` : ils ne capturent rien et ne peuvent pas appeler Compose.
+Ils mettent en file (`ImeState`), et la boucle de frames draine la file sur le thread compose. Même schéma
+que les callbacks GLFW.
+
+Deux bugs d'ordre, tous deux silencieux :
+
+- **Le protocole doit être bindé AVANT `setContent`.** Compose met le focus sur le champ pendant la
+  composition et démarre immédiatement une session de saisie ; si le protocole n'est pas encore bindé, ce
+  `enable()` tombe dans le vide.
+- **L'IME ne doit pas répondre à la première activation.** Le compositeur n'a pas encore donné le focus
+  texte à la surface (`enter` n'est pas arrivé), il jette donc tout ce qui est envoyé. Et Compose **détruit
+  la session puis la rétablit** juste après le focus : la première activation n'est pas celle qui tient. Un
+  vrai IME ne rencontre ni l'un ni l'autre, parce qu'un humain met du temps à taper.
+
+### Ce qui reste
+
+`surrounding_text` (le contexte qu'un IME utilise pour prédire), `delete_surrounding_text`, et le suivi du
+curseur en temps réel. Des raffinements, pas des inconnues. Un vrai IME (fcitx5) ou un clavier virtuel
+(`maliit`, `squeekboard`, `wvkbd`) voit exactement ce que voit la méthode de saisie de test : **le chemin du
+clavier à l'écran pour un mobile est donc ouvert**.
+
+Aucune régression : X11 (10 assertions) et Wayland (7) passent toujours.
+
+### Temps passé
+
+- Jalon 11 (cette session) : ~1 h (contrat moderne, edit commands, corrections d'ordre).
+
 ## Route A1 (build monorepo complet) : recette + mur, et le poll Maven
 
 **Poll Maven (2026-07-11, 17:45Z) :** `org.jetbrains.compose.ui:ui-linuxarm64`,

@@ -18,13 +18,42 @@ import glfw.glfwGetWaylandWindow
 import kotlinx.cinterop.*
 import waylandtext.*
 
-/** What the compositor sent back. The probe's whole point is that these fill up. */
+/**
+ * What the compositor sent back.
+ *
+ * This is a queue, not just a log, because the Wayland listeners are staticCFunction: they capture nothing
+ * and cannot call into Compose. They push here, and the frame loop drains it on the compose thread
+ * (LinuxTextInputService.drain), which is the same pattern the GLFW input callbacks use.
+ */
 object ImeState {
     var available = false          // did we find text-input-v3 on this compositor?
     var enabled = false            // did enable() go out?
-    val preedits = mutableListOf<String>()   // text being composed (underlined in a real UI)
-    val commits = mutableListOf<String>()    // text the IME finally committed
     var enteredSurface = false     // compositor told us the surface has text focus
+
+    private val preedits = mutableListOf<String>()   // text being composed (shown underlined)
+    private val commits = mutableListOf<String>()    // text the IME finally committed
+
+    internal fun pushPreedit(text: String) { preedits.add(text) }
+    internal fun pushCommit(text: String) { commits.add(text) }
+
+    /** Committed text, in order. Each one is final. */
+    fun takeCommits(): List<String> {
+        if (commits.isEmpty()) return emptyList()
+        val out = commits.toList()
+        commits.clear()
+        return out
+    }
+
+    /** Only the newest preedit matters: the earlier ones have already been superseded. */
+    fun takeLastPreedit(): String? {
+        if (preedits.isEmpty()) return null
+        val last = preedits.last()
+        preedits.clear()
+        return last
+    }
+
+    /** For the probe's own reporting. */
+    fun seenAny(): Boolean = preedits.isNotEmpty() || commits.isNotEmpty()
 }
 
 // Opaque Wayland objects land in cnames.structs, same as GLFWwindow.
@@ -87,12 +116,12 @@ fun initWaylandTextInput(): Boolean {
     }
     textInputListener.preedit_string = staticCFunction { _, _, text, _, _ ->
         val s = text?.toKString() ?: ""
-        ImeState.preedits.add(s)
+        ImeState.pushPreedit(s)
         println("IME: preedit_string='$s'  (text being composed)"); platform.posix.fflush(null)
     }
     textInputListener.commit_string = staticCFunction { _, _, text ->
         val s = text?.toKString() ?: ""
-        ImeState.commits.add(s)
+        ImeState.pushCommit(s)
         println("IME: commit_string='$s'  (IME committed this text)"); platform.posix.fflush(null)
     }
     textInputListener.delete_surrounding_text = staticCFunction { _, _, _, _ -> }

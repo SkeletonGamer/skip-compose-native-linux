@@ -56,7 +56,15 @@ static void im_done(void *data, struct zwp_input_method_v2 *im) {
     serial++;              // one `done` received
     if (!active) return;
 
-    if (step > 0) return;
+    if (step >= 3) return;   // a few rounds is plenty; do not spam
+    step++;
+
+    // Wait before answering. Firing straight from `activate` is too early: the compositor has not yet given
+    // the app's surface text focus (its text-input `enter` has not arrived), so it drops everything we send.
+    // Compose also tears the session down and re-establishes it right after focus, so the first activation
+    // is not the one that sticks. Answering EVERY activation (not just the first) is what makes this land.
+    // A real IME never hits any of this, because a human takes time to type.
+    sleep(2);
 
     // Both messages go out on THIS done, not one per done. The compositor only emits `done` when the text
     // field's state changes, and the app calls enable() once, so waiting for a second `done` waits forever
@@ -71,8 +79,7 @@ static void im_done(void *data, struct zwp_input_method_v2 *im) {
     zwp_input_method_v2_commit(im, serial);
     fprintf(stderr, "fake-ime: sent commit_string 'IME-OK'\n");
 
-    step = 1;
-    active = 0;   // once is enough for the test
+    active = 0;   // wait for the next activate
 }
 static void im_unavailable(void *data, struct zwp_input_method_v2 *im) {
     fprintf(stderr, "fake-ime: another input method already owns the seat\n");
