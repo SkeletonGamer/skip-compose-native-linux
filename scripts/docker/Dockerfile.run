@@ -16,13 +16,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         xdotool xclip x11-utils \
         libicu76 locales-all \
-        sway wtype wl-clipboard \
+        sway wtype wlrctl wl-clipboard \
     && rm -rf /var/lib/apt/lists/*
 # Two display stacks, because the app must work on both:
 #  - X11: Xvfb + xdotool (real X11 events) + xclip (real X11 clipboard).
 #  - Wayland: sway with the headless wlroots backend, the same wlroots family labwc/Budgie uses.
-#    Input goes through wtype (zwp_virtual_keyboard_v1), because xdotool CANNOT drive a Wayland client:
-#    Wayland forbids one client from injecting events into another. wl-clipboard reads the selection.
+#    xdotool CANNOT drive a Wayland client: Wayland forbids one client from injecting events into another,
+#    which is the security model X11 never had. Automation therefore needs explicit protocols:
+#      wtype   -> keyboard      (zwp_virtual_keyboard_v1)
+#      wlrctl  -> pointer       (zwlr_virtual_pointer_v1): move (RELATIVE), click, scroll
+#      wl-clipboard -> selection (wl_data_device)
+#      swaymsg -> window geometry, for resize
+#    Every Wayland UI automation has to go through these; there is no generic injector.
 # The tests locate widgets by tag, reading the semantics dump the app writes (/out/tags.txt) with awk. It is
 # a plain "tag x y w h" line per widget precisely so no JSON parser is needed: python3-minimal ships without
 # the json module, and it failed silently.

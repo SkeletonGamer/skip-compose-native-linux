@@ -139,6 +139,7 @@ l'app witness, puis la dé-Android-ise avec `scripts/patch-export.sh`. Ensuite, 
 | POC 5 : test locale + droite-à-gauche | voir `scripts/test-locale.sh` |
 | POC 5 : ICU (dlopen au runtime, avec et sans) | voir `scripts/test-icu.sh` |
 | POC 5 : Wayland natif (compositeur wlroots, sans serveur X) | voir `scripts/test-wayland.sh` |
+| POC 5 : automatisation des entrées Wayland | voir `scripts/test-wayland-input.sh` |
 
 `run-native.sh` prend une architecture en troisième argument (`arm64` par défaut, ou `x64`), ce qui permet
 de faire tourner la même pile sur les deux architectures Linux :
@@ -168,6 +169,14 @@ symbole GLX, et tous les symboles `gl*` dont elle a besoin sont dans `libGLESv2`
 lance l'app sur un compositeur **wlroots** headless **sans aucun serveur X**, donc sans repli possible : le
 fait qu'une frame soit rendue prouve le chemin Wayland.
 
+Automatiser une UI Wayland est un autre exercice, et `test-wayland-input.sh` en est la référence : Wayland
+**interdit à un client d'injecter des événements dans un autre client**, il n'y a donc pas d'équivalent à
+`xdotool`. Chaque entrée exige son propre protocole (`wtype` pour le clavier, `zwlr_virtual_pointer` pour la
+souris, `wl-clipboard` pour la sélection, l'IPC du compositeur pour la géométrie) *et* un compositeur qui
+coopère. Le pointeur, en particulier, **ne peut pas** être piloté sur un seat headless (`capabilities: 0`,
+aucun périphérique d'entrée attaché) : ces vérifications rapportent donc SKIP plutôt qu'un faux PASS. Elles
+sont couvertes sous X11, et le mediator n'a aucune branche X11/Wayland : c'est le même code de callbacks
+GLFW des deux côtés.
 
 Les prérequis (un JDK, Docker, la chaîne d'outils Skip), les overrides et la matrice complète sont dans
 [`scripts/README.md`](./scripts/README.md).

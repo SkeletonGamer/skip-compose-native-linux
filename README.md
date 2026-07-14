@@ -136,6 +136,7 @@ the witness app, then de-Android-ifies it with `scripts/patch-export.sh`. Then r
 | POC 5: locale + right-to-left test | see `scripts/test-locale.sh` |
 | POC 5: ICU (runtime dlopen, with and without) | see `scripts/test-icu.sh` |
 | POC 5: native Wayland (wlroots compositor, no X server) | see `scripts/test-wayland.sh` |
+| POC 5: Wayland input automation | see `scripts/test-wayland-input.sh` |
 
 `run-native.sh` takes an architecture as its third argument (`arm64` by default, or `x64`), so the same
 stack can be run on both Linux architectures: `scripts/run-native.sh poc5-native release x64`.
@@ -163,6 +164,13 @@ entirely. `ldd` now shows neither libX11 nor libwayland. `test-wayland.sh` runs 
 **wlroots** compositor with **no X server at all**, so there is nothing to fall back to: rendering a frame
 proves the Wayland path.
 
+Automating a Wayland UI is a different exercise, and `test-wayland-input.sh` is the reference: Wayland
+**forbids a client from injecting events into another client**, so there is no `xdotool` equivalent. Each
+input needs its own protocol (`wtype` for the keyboard, `zwlr_virtual_pointer` for the mouse,
+`wl-clipboard` for the selection, compositor IPC for geometry) *and* a compositor that cooperates. The
+pointer in particular **cannot** be driven on a headless seat (`capabilities: 0`, no input device attached),
+so those checks report SKIP rather than a fake PASS. They are covered under X11, and the mediator has no
+X11/Wayland branch: it is the same GLFW callback code on both.
 
 Prerequisites (a JDK, Docker, the Skip toolchain), overrides and the full matrix are in
 [`scripts/README.md`](./scripts/README.md).

@@ -615,7 +615,37 @@ bookworm et ICU 76 sur trixie, et a fonctionné sur les deux.** C'est exactement
 chargement au runtime du Jalon 8 avait été conçu, et il s'est produit pour de vrai, sans l'avoir prévu : un
 binaire lié contre ICU 72 n'aurait tout simplement pas démarré ici.
 
-### Deux bugs de harnais à retenir
+### Automatiser une UI Wayland : il n'y a pas de xdotool, et c'est voulu
+
+Wayland **interdit à un client d'injecter des événements dans un autre client**. C'est le modèle de sécurité
+que X11 n'a jamais eu, et il implique qu'aucun injecteur générique n'existe. Chaque type d'entrée exige un
+protocole explicite **et** un compositeur qui coopère (`scripts/test-wayland-input.sh`) :
+
+| Entrée | Outil | Protocole | Marche en headless |
+|---|---|---|---|
+| Clavier | `wtype` | `zwp_virtual_keyboard_v1` | **oui** |
+| Pointeur | `wlrctl` | `zwlr_virtual_pointer_v1` | **non**, voir ci-dessous |
+| Presse-papiers | `wl-clipboard` | `wl_data_device` | nécessite le focus |
+| Géométrie de fenêtre | `swaymsg` | IPC du compositeur | oui |
+
+**Le pointeur ne peut pas être piloté sur un seat headless, et c'est mesuré, pas supposé.**
+`swaymsg -t get_seats` rapporte **`capabilities: 0`** : le backend headless de wlroots n'attache aucun
+périphérique d'entrée, donc le seat n'annonce aucun pointeur, donc un client ne crée jamais de `wl_pointer`,
+donc les événements du pointeur virtuel ne sont délivrés à personne. Vérifié directement : cinq cycles
+`wlrctl` move+click et les commandes curseur de sway ont produit **zéro** événement pointeur dans l'app.
+
+C'est une propriété du **compositeur headless**, pas de l'app. Le mediator n'a **aucune branche X11/Wayland**
+(c'est le même code de callbacks GLFW), et l'entrée pointeur est prouvée sous X11. La suite Wayland rapporte
+donc ces vérifications en **SKIP**, pas en PASS. Combler le trou exige un seat avec un vrai périphérique
+d'entrée : une vraie session de bureau, ou un périphérique `uinput` dans un conteneur privilégié. Ni l'un ni
+l'autre n'a sa place dans ce harnais.
+
+À noter aussi : sous Wayland, le **client ne peut pas se redimensionner lui-même**, c'est le compositeur qui
+possède la géométrie. La fenêtre doit être flottante (le tiling écrase `resize set`), et la surface que
+reçoit l'app est plus petite que la taille demandée, car le compositeur soustrait ses décorations (demandé
+900x700, l'app a reçu 896x673).
+
+### Trois bugs de harnais à retenir
 
 - **Le builder Docker legacy ignore `--platform`.** `DOCKER_BUILDKIT=0` (ajouté plus tôt pour contourner un
   timeout de registre) produisait silencieusement une image **amd64** sur un hôte arm64, et le `.kexe` arm64
@@ -627,7 +657,10 @@ binaire lié contre ICU 72 n'aurait tout simplement pas démarré ici.
   correctif est un caractère sacrificiel dans la même chaîne. Ce n'est **pas** un problème de disposition
   clavier : le caractère perdu est toujours le premier quel qu'il soit, et `w` arrive bien en `w`
   (codepoint 119), pas en `z` mal mappé.
-
+- **`swaymsg` sans `SWAYSOCK` échoue en silence.** Un run précédent rapportait le resize en PASS alors que
+  `swaymsg` ne s'était jamais exécuté : ce qui redimensionnait la fenêtre, c'était le tiling de sway au
+  démarrage. Même mode de défaillance que les bugs ICU et dump de tags du Jalon 8 : un test qui passe pour
+  la mauvaise raison.
 
 ### Temps passé
 

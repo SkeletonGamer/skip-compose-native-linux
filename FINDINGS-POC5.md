@@ -592,7 +592,35 @@ bookworm and ICU 76 on trixie, and worked on both.** That is exactly the scenari
 Jalon 8 was built for, and it happened for real, unplanned: a binary linked against ICU 72 would simply not
 have started here.
 
-### Two harness bugs worth recording
+### Automating a Wayland UI: there is no xdotool, and that is by design
+
+Wayland **forbids a client from injecting events into another client**. This is the security model X11 never
+had, and it means no generic injector exists. Every input needs an explicit protocol **and** a compositor
+that cooperates (`scripts/test-wayland-input.sh`):
+
+| Input | Tool | Protocol | Works headless |
+|---|---|---|---|
+| Keyboard | `wtype` | `zwp_virtual_keyboard_v1` | **yes** |
+| Pointer | `wlrctl` | `zwlr_virtual_pointer_v1` | **no**, see below |
+| Clipboard | `wl-clipboard` | `wl_data_device` | needs focus |
+| Window geometry | `swaymsg` | compositor IPC | yes |
+
+**The pointer cannot be driven on a headless seat, and this is measured, not assumed.**
+`swaymsg -t get_seats` reports **`capabilities: 0`**: the headless wlroots backend attaches no input device,
+so the seat advertises no pointer, so a client never creates a `wl_pointer`, so virtual-pointer events go to
+nobody. Verified directly: five `wlrctl` move+click rounds and sway's own cursor commands both produced
+**zero** pointer events in the app.
+
+This is a property of the **headless compositor**, not of the app. The mediator has **no X11/Wayland branch
+at all** (it is the same GLFW callback code), and pointer input is proven under X11. So the Wayland suite
+reports those checks as **SKIP**, not PASS. Closing the gap needs a seat with a real input device: a real
+desktop session, or a `uinput` device in a privileged container. Neither belongs in this harness.
+
+Note also that under Wayland the **client cannot resize itself**: the compositor owns geometry. The window
+must be floating (tiling overrides `resize set`), and the surface the app receives is smaller than the size
+requested, because the compositor subtracts its decorations (asked 900x700, app got 896x673).
+
+### Three harness bugs worth recording
 
 - **The legacy Docker builder ignores `--platform`.** `DOCKER_BUILDKIT=0` (added earlier to work around a
   registry timeout) silently produced an **amd64** image on an arm64 host, and the arm64 `.kexe` failed with
@@ -602,7 +630,9 @@ have started here.
   produced zero events; `"wayland"` always arrived as `"ayland"`). The fix is a sacrificial character inside
   the same string. This is not a keyboard-layout problem: the lost character is always the first one
   whatever it is, and `w` arrives as `w` (codepoint 119), not as a mismapped `z`.
-
+- **`swaymsg` without `SWAYSOCK` fails silently.** An earlier run reported resize as PASS while `swaymsg`
+  had never executed: what actually resized the window was sway's own tiling at startup. Same failure mode
+  as the ICU and tag-dump bugs of Jalon 8: a test passing for the wrong reason.
 
 ### Time spent
 
