@@ -1,13 +1,16 @@
-// Bridge between the GLFW mediator (main.kt) and the Compose platform actuals.
+// Bridge between the GLFW mediator (main.kt) and the GLFW-specific pieces of the embedder.
 //
-// Some actuals (clipboard, cursors) have to talk to the window system, but they are compiled inside the
-// compose stack and cannot reach the mediator's locals. GLFW's clipboard and cursor APIs both need the
-// window handle, so the mediator publishes it here once at startup. This POC drives a single window, so
-// a single global handle is the whole story.
+// GLFW's cursor API needs the window handle, so the mediator publishes it here once at startup. This POC
+// drives a single window, so a single global handle is the whole story.
+//
+// Note what is NOT here any more: the clipboard (it moved to GlfwClipboardBackend, installed into Compose
+// through a toolkit-neutral seam) and the cursor SHAPE enum (it moved into Compose, where it belongs, as
+// LinuxCursorShape). Compose now names no toolkit at all.
 @file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 
 package linuxglfw
 
+import androidx.compose.ui.input.pointer.LinuxCursorShape
 import cnames.structs.GLFWcursor
 import cnames.structs.GLFWwindow
 import kotlinx.cinterop.CPointer
@@ -17,8 +20,5 @@ object GlfwBridge {
     var window: CPointer<GLFWwindow>? = null
 
     /** Standard cursors, created once by the mediator (GLFW must be initialized first). */
-    var cursors: Map<LinuxCursorKind, CPointer<GLFWcursor>?> = emptyMap()
+    var cursors: Map<LinuxCursorShape, CPointer<GLFWcursor>?> = emptyMap()
 }
-
-/** The cursor shapes Compose asks for. The mediator maps these to GLFW_*_CURSOR. */
-enum class LinuxCursorKind { Default, Crosshair, Text, Hand }

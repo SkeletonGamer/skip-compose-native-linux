@@ -45,6 +45,22 @@ object SemanticsExport {
         fclose(f)
     }
 
+    /**
+     * Centre of a tagged widget, in window coordinates, or null if the tag is not laid out (yet).
+     *
+     * Same tree as [dump], for callers that drive the pointer in-process rather than through X11.
+     */
+    fun centerOf(tag: String): Pair<Float, Float>? {
+        val root = owner?.unmergedRootSemanticsNode ?: return null
+        return find(root, tag)?.boundsInWindow?.let { it.center.x to it.center.y }
+    }
+
+    private fun find(node: SemanticsNode, tag: String): SemanticsNode? {
+        if (node.config.getOrNull(SemanticsProperties.TestTag) == tag) return node
+        for (child in node.children) find(child, tag)?.let { return it }
+        return null
+    }
+
     private fun collect(node: SemanticsNode, out: MutableList<String>) {
         node.config.getOrNull(SemanticsProperties.TestTag)?.let { tag ->
             val b = node.boundsInWindow

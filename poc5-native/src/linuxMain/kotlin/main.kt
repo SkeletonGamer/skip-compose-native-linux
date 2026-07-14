@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.pointer.LinuxCursor
+import androidx.compose.ui.input.pointer.LinuxCursorShape
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -82,7 +83,6 @@ import kotlinx.cinterop.value
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import linuxglfw.GlfwBridge
-import linuxglfw.LinuxCursorKind
 import org.jetbrains.skia.BackendRenderTarget
 import org.jetbrains.skia.ColorSpace
 import org.jetbrains.skia.DirectContext
@@ -275,13 +275,19 @@ fun main() = runBlocking {
     glfwSwapInterval(0)
     logln("POC5: window + GL context ok")
 
-    // Publish the window + cursors so the compose actuals (clipboard, pointer icon) can reach them.
+    // Publish the window + cursors so the compose actuals (pointer icon) can reach them.
     GlfwBridge.window = window
+
+    // Install the system clipboard. Compose no longer knows GLFW exists: its Linux actual keeps an in-process
+    // clipboard and exposes a seam, and the embedder that owns the window fills it. That is what lets the very
+    // same compose klib link into the GTK embedder with no GLFW at all (see gtkmain/GtkMain.kt).
+    androidx.compose.ui.platform.NativeClipboard.backend = linuxglfw.GlfwClipboardBackend()
+
     GlfwBridge.cursors = mapOf(
-        LinuxCursorKind.Default to glfwCreateStandardCursor(GLFW_ARROW_CURSOR),
-        LinuxCursorKind.Text to glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),
-        LinuxCursorKind.Hand to glfwCreateStandardCursor(GLFW_HAND_CURSOR),
-        LinuxCursorKind.Crosshair to glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR),
+        LinuxCursorShape.Default to glfwCreateStandardCursor(GLFW_ARROW_CURSOR),
+        LinuxCursorShape.Text to glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),
+        LinuxCursorShape.Hand to glfwCreateStandardCursor(GLFW_HAND_CURSOR),
+        LinuxCursorShape.Crosshair to glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR),
     )
 
     glfwSetKeyCallback(window, keyCb)
@@ -339,7 +345,7 @@ fun main() = runBlocking {
             request: androidx.compose.ui.platform.PlatformTextInputMethodRequest
         ): Nothing = textInput.startInputMethod(request)
         override fun setPointerIcon(pointerIcon: PointerIcon) {
-            val kind = (pointerIcon as? LinuxCursor)?.kind ?: LinuxCursorKind.Default
+            val kind = (pointerIcon as? LinuxCursor)?.shape ?: LinuxCursorShape.Default
             glfwSetCursor(window, GlfwBridge.cursors[kind])
             logln("POC5: cursor -> $kind")
         }

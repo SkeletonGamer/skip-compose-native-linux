@@ -1,0 +1,71 @@
+headers = gtk/gtk.h
+package = gtk
+
+# GTK4 is a plain C library, so cinterop consumes it directly with no shim. That is the whole point of this
+# experiment: Jake Wharton's objection is that actualizing Compose's Linux platform surface to one toolkit
+# ("if you actualize to GTK then it would be impossible to use for Qt") poisons every other toolkit. This
+# def file exists to build a SECOND embedder, on GTK instead of GLFW, against the very same Compose klib.
+
+# GTK pulls in GL/gl.h by way of gdk; skiko brings its own GL, so keep the system GL headers out.
+compilerOpts = -DGTK_COMPILATION -D__GI_SCANNER__
+
+---
+
+// GtkGLArea does NOT render into framebuffer 0: it owns its own FBO and hands the result to the GTK scene
+// graph as a texture (docs.gtk.org/gtk4/class.GLArea.html). Skia therefore has to be told which framebuffer
+// to draw into, and the sanctioned way to learn it is to read GL_FRAMEBUFFER_BINDING inside the render
+// handler. Passing 0, as the GLFW mediator legitimately does, renders to nothing here.
+//
+// glGetIntegerv is declared by hand rather than by including <GLES2/gl2.h>, because the GL headers are not
+// staged for cross-compilation and skiko already supplies the GL symbols at link time.
+typedef unsigned int poc_GLenum;
+typedef int poc_GLint;
+extern void glGetIntegerv(poc_GLenum pname, poc_GLint *params);
+
+#define POC_GL_FRAMEBUFFER_BINDING 0x8CA6
+
+static int poc_gtk_current_fbo(void) {
+    poc_GLint fb = 0;
+    glGetIntegerv(POC_GL_FRAMEBUFFER_BINDING, &fb);
+    return (int) fb;
+}
+
+// Skia must be told how many samples the target framebuffer really has. GtkGLArea may hand us a
+// multisampled FBO, and claiming 0 samples on one corrupts every glyph.
+#define POC_GL_SAMPLES 0x80A9
+#define POC_GL_STENCIL_BITS 0x0D57
+
+static int poc_gtk_samples(void) {
+    poc_GLint n = 0;
+    glGetIntegerv(POC_GL_SAMPLES, &n);
+    return (int) n;
+}
+
+static int poc_gtk_stencil_bits(void) {
+    poc_GLint n = 0;
+    glGetIntegerv(POC_GL_STENCIL_BITS, &n);
+    return (int) n;
+}
+
+// Is GTK's framebuffer sRGB-encoded? If it is and we tell Skia it is plain RGBA8, Skia writes linear values
+// into a framebuffer that then applies the sRGB transfer curve, and glyph anti-aliasing comes out fat and
+// smeared. Ask GL instead of guessing.
+extern void glGetFramebufferAttachmentParameteriv(poc_GLenum target, poc_GLenum attachment,
+                                                  poc_GLenum pname, poc_GLint *params);
+#define POC_GL_FRAMEBUFFER 0x8D40
+#define POC_GL_COLOR_ATTACHMENT0 0x8CE0
+#define POC_GL_FB_ATTACHMENT_COLOR_ENCODING 0x8210
+#define POC_GL_SRGB 0x8C40
+
+static int poc_gtk_is_srgb(void) {
+    poc_GLint enc = 0;
+    glGetFramebufferAttachmentParameteriv(POC_GL_FRAMEBUFFER, POC_GL_COLOR_ATTACHMENT0,
+                                          POC_GL_FB_ATTACHMENT_COLOR_ENCODING, &enc);
+    return enc == POC_GL_SRGB;
+}
+
+// g_signal_connect is a macro, so cinterop cannot see it. g_signal_connect_data is the real function behind
+// it; wrap it so the Kotlin side reads like the C people write.
+static unsigned long poc_signal_connect(void *instance, const char *signal, void *handler, void *data) {
+    return g_signal_connect_data(instance, signal, (GCallback) handler, data, NULL, (GConnectFlags) 0);
+}

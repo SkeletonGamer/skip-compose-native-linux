@@ -20,6 +20,13 @@ un seul binaire**, sans aucune dépendance au serveur d'affichage au moment du l
 pilotant l'app avec de vraies entrées, pas en les simulant à l'intérieur du process
 (voir [Reproduire](#reproduire)).
 
+**La toolkit de fenêtrage n'est pas figée dans le binaire.** L'objection de Jake Wharton à Compose sur Linux,
+c'est que l'`expect/actual` « suppose qu'il n'existe qu'une seule toolkit canonique par cible de compilation »,
+si bien qu'actualiser vers l'une casserait toutes les autres. C'est désormais testé plutôt que débattu : un
+second embedder pilote le même klib compose depuis **GTK4**, et le binaire GTK ne lie **aucun GLFW**
+(`readelf` : zéro symbole `glfw*` non résolu, contre 54 pour le build GLFW). Pour y arriver, il a fallu sortir
+de Compose une seule chose : le presse-papiers. Voir le Jalon 13 dans les findings.
+
 Non implémenté : **l'accessibilité** (aucune cible Kotlin/Native de Compose n'en a, macOS compris). Le rendu
 n'est mesuré qu'en **software GL**, jamais sur un vrai GPU. Et `ui`/`foundation`/`material3` ne sont
 toujours **pas publiés sur Maven** pour Linux : ça compile donc depuis les sources.

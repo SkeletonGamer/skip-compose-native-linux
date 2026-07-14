@@ -103,6 +103,37 @@ if [ ! -f "$WL/text-input-v3-client-protocol.h" ]; then
   ' || { echo "[wayland] ERROR: could not generate the text-input-v3 bindings." >&2; exit 1; }
 fi
 
+# --- 3b. GTK4: headers + libs for the SECOND embedder (the "is the toolkit pluggable?" experiment) ---
+# poc5-native builds a second executable that drives the same compose klib from GTK4 instead of GLFW, to show
+# that no window toolkit is baked into Compose (Jalon 13). GTK4 is plain C, so cinterop binds it with no shim,
+# but it needs its whole public header chain (glib, cairo, pango, gdk-pixbuf, graphene, harfbuzz).
+GTK="$ROOT/poc5-native/native/gtk"
+if [ ! -f "$GTK/include/gtk-4.0/gtk/gtk.h" ]; then
+  echo "[gtk] staging GTK4 headers + libs for the GTK embedder (docker)..."
+  mkdir -p "$GTK"
+  docker run --rm --platform linux/arm64 -v "$GTK:/out" debian:trixie-slim bash -lc '
+    set -e
+    cat > /etc/apt/sources.list.d/debian.sources <<EOF
+Types: deb
+URIs: http://deb.debian.org/debian
+Suites: trixie
+Components: main
+Trusted: yes
+EOF
+    apt-get update -qq >/dev/null 2>&1 || { sleep 3; apt-get update -qq >/dev/null 2>&1; }
+    apt-get install -y --no-install-recommends libgtk-4-dev >/dev/null 2>&1
+    mkdir -p /out/include /out/lib
+    for d in gtk-4.0 glib-2.0 cairo pango-1.0 gdk-pixbuf-2.0 graphene-1.0 harfbuzz; do
+      [ -d /usr/include/$d ] && cp -r /usr/include/$d /out/include/
+    done
+    # glibconfig.h and graphene-config.h are generated and live under lib/, not include/.
+    find /usr/lib/aarch64-linux-gnu -name "*.h" -path "*include*" -exec cp {} /out/include/ \;
+    for l in gtk-4 gdk_pixbuf-2.0 gio-2.0 gobject-2.0 glib-2.0 pango-1.0 pangocairo-1.0 cairo graphene-1.0 harfbuzz epoxy; do
+      cp -P /usr/lib/aarch64-linux-gnu/lib$l.so* /out/lib/ 2>/dev/null || true
+    done
+  ' || { echo "[gtk] ERROR: could not stage GTK4. The GTK embedder will not build." >&2; exit 1; }
+fi
+
 # The IME test harness needs input-method-v2, which is a wlroots protocol: NOT in wayland-protocols, and not
 # packaged by Debian. It lives in the wlroots repo. Only the test-side fake IME uses it.
 PROTO="$ROOT/scripts/docker/protocols"

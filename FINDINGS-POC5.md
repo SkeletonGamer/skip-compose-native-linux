@@ -828,6 +828,111 @@ No regressions: X11 (10 assertions), Wayland (7) and ICU (9) all still pass.
 
 - Jalon 12 (this session): ~45 min.
 
+## Jalon 13: a second embedder on GTK4, and the answer to the "expect/actual" objection
+
+The one design objection to Compose on native Linux was stated by Jake Wharton in the Kotlin Slack
+`#compose` thread, and agreed with by Ivan Matkov of JetBrains:
+
+> **Jake Wharton:** "The use of expect/actual instead of polymorphism means that it assumes there is only a
+> single, canonical UI toolkit for each build target and that's simply not true for Linux. If you actualize
+> to GTK then it would be impossible to use for Qt and it would have been impossible for me to use on the
+> light switch or similar embedded-style devices."
+>
+> He had already put the condition for a way out: "There is no 'native' window system like there is for Mac
+> or the JVM. If you target one, you kinda break the ability to use it with others **unless your actuals on
+> Linux are themselves an abstraction that can be swapped out**."
+>
+> **Ivan Matkov (JetBrains):** ":100: Trying to change this internally (not only because of linux), but it's
+> not so easy"
+
+That is a testable claim, so this milestone tests it rather than arguing about it: a **second embedder**,
+on **GTK4** instead of GLFW, driving the very same compiled `compose.ui`/`foundation`/`material3` klib and
+the very same 42 Linux actuals.
+
+### The measurement: a link error, not an opinion
+
+The `gtk` executable is linked **without `-lglfw`** on purpose. Anything inside Compose still reaching for
+the toolkit then has to surface as an undefined symbol. The linker's answer, in full:
+
+```
+ld.lld: error: undefined symbol: glfwSetClipboardString
+ld.lld: error: undefined symbol: glfwGetClipboardString
+```
+
+**Two symbols.** Out of the whole `compose.ui` + `foundation` + `material3` surface and all 42 actuals.
+Wharton's prediction is correct, and it reduces to a single factory: `RootNodeOwner.skiko.kt:472` calls
+`createPlatformClipboard()` unconditionally when any scene is built, and on Linux that `internal expect fun`
+was reaching into GLFW.
+
+The contrast with the cursor, in the same file, is the whole lesson:
+
+| `RootNodeOwner.skiko.kt` | consequence |
+|---|---|
+| `:471` `override val clipboardManager = createPlatformClipboardManager()` | `expect fun`, resolved per **build target**: nails the toolkit |
+| `:472` `override val clipboard = createPlatformClipboard()` | same, and the only real lock |
+| `:889` `platformContext.setPointerIcon(...)` | an **interface** method with a no-op default: already swappable |
+
+The pointer icon was already doing what Wharton asks for. The clipboard was not.
+
+### The fix, which does not fork jb-main
+
+The clipboard becomes the swappable abstraction. The Linux actual keeps an **in-process** clipboard, which is
+the honest default for a device with no window server at all, and exposes a seam
+(`LinuxClipboardBackend`) that the embedder fills. The GLFW calls moved out of Compose and into the mediator
+(`linuxglfw/GlfwClipboardBackend.kt`). The cursor shape enum, which used to sit in the mediator's `linuxglfw`
+package and so made Compose name a toolkit it does not use, moved into Compose as `LinuxCursorShape`.
+
+**No patch to `jb-main`.** `compose.ui` now contains no import of any window toolkit at all.
+
+### Result, read off the binaries with `readelf`
+
+| | GLFW binary | GTK binary |
+|---|---|---|
+| `libglfw.so.3` in `DT_NEEDED` | yes | **no** |
+| undefined `glfw*` symbols required from the system | 54 | **0** |
+
+And the GTK app **renders and reacts**: material3 through a `GtkGLArea`, and a click on the real material3
+`Button` takes the counter to 1 (`docs/poc5-gtk4-embedder.png`). The GLFW build still passes all 10 X11
+assertions, the real system clipboard included, so nothing regressed.
+
+### Two real costs, for whoever tries this next
+
+1. **`GtkGLArea` does not render into framebuffer 0.** It owns its own FBO (`id=1` here) and hands the result
+   to GTK's scene graph as a texture. Skia must be told which one: read `GL_FRAMEBUFFER_BINDING` inside the
+   `render` handler. Passing 0, as the GLFW mediator rightly does, draws into nothing.
+2. **GTK draws the rest of the widget tree with its own GL renderer between our frames**, so the GL state Skia
+   cached is stale when we come back, and every glyph comes out fat and smeared. `DirectContext.resetAll()`
+   on each frame fixes it. The GLFW mediator never needs this, because nobody else touches GL there. This is
+   the real price of sharing a GL context with a toolkit that also draws.
+
+### Qt: verified as materially more expensive, and no longer necessary
+
+Kotlin/Native `cinterop` binds **C and Objective-C** only (the `.def` file's `language` property accepts
+nothing else). **Qt is C++ only**, with no C API, so binding it means hand-writing an `extern "C"` layer that
+owns the QObjects and marshals signals and slots back to Kotlin: a C++ codebase to maintain, not a `.def`
+file. GTK4, being plain C, cost none of that: cinterop swallowed its 804 headers in 8 seconds with no shim.
+
+A Qt embedder is no longer needed to settle the question, though. Compose now references **no** toolkit, so a
+Qt embedder would exercise exactly the same seam GTK does.
+
+### What this says to the upstream question
+
+The honest scope: this measures the **platform actuals surface** of `ui`/`foundation`/`material3`. It does
+not settle who should own the window and the event loop, which is a separate question. On that, the only
+evidence here is by existence: the embedder drives `ComposeScene` from outside, on two architectures, on X11
+and Wayland, and now under two different toolkits.
+
+Within that scope, the answer to Matkov's "it's not so easy" is that, for Linux, it may be easier than it
+looks: the coupling is not diffuse, it is one factory function. Upstream, the clean form of this seam is
+`PlatformContext`, which already carries `textInputService`, `inputModeManager`, `localeList` and
+`setPointerIcon()`, all with defaults. Adding `val clipboard: Clipboard` there has the same shape. And
+`NativeClipboard` needs no new design either: `desktopMain` already declares
+`actual typealias NativeClipboard = Any`.
+
+### Time spent
+
+- Jalon 13 (this session): ~2 h.
+
 ## Route A1 (full monorepo build): recipe + wall, and the Maven poll
 
 **Maven poll (2026-07-11, 17:45Z):** `org.jetbrains.compose.ui:ui-linuxarm64`,

@@ -61,7 +61,43 @@ kotlin {
             }
         }
     }
-    linuxArm64 { linuxTarget("native/glfw/lib") }
+    linuxArm64 {
+        linuxTarget("native/glfw/lib")
+
+        // The GTK experiment. Jake Wharton's objection to Compose on Linux is that expect/actual "assumes
+        // there is only a single, canonical UI toolkit for each build target and that's simply not true for
+        // Linux. If you actualize to GTK then it would be impossible to use for Qt". This builds a SECOND
+        // embedder, on GTK4 instead of GLFW, against the very same compose klib, to find out how much of the
+        // platform surface is really nailed to a toolkit.
+        //
+        // Note the linkerOpts below: -lglfw is deliberately absent. Whatever inside Compose still needs GLFW
+        // will show up as an undefined symbol, which is a fact of the linker rather than an opinion.
+        compilations.getByName("main").cinterops.create("gtk") {
+            defFile(project.file("native/gtk4.def"))
+            includeDirs(
+                project.file("native/gtk/include"),
+                project.file("native/gtk/include/gtk-4.0"),
+                project.file("native/gtk/include/glib-2.0"),
+                project.file("native/gtk/include/pango-1.0"),
+                project.file("native/gtk/include/cairo"),
+                project.file("native/gtk/include/gdk-pixbuf-2.0"),
+                project.file("native/gtk/include/graphene-1.0"),
+                project.file("native/gtk/include/harfbuzz"),
+            )
+        }
+        binaries {
+            executable("gtk") {
+                entryPoint = "gtkmain.main"
+                linkerOpts(
+                    "-L${project.file("native/glfw/lib")}",
+                    "-L${project.file("native/gtk/lib")}",
+                    "-lgtk-4", "-lgobject-2.0", "-lglib-2.0", "-lgio-2.0",
+                    "-lGLESv2", "-lEGL", "-lfontconfig", "-lfreetype",
+                    "--allow-shlib-undefined",
+                )
+            }
+        }
+    }
     linuxX64 { linuxTarget("native/glfw/lib-x64") }
 
     // The real compose-ui build opts in globally to these (cross-module internal/experimental APIs).
