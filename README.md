@@ -156,6 +156,7 @@ the witness app, then de-Android-ifies it with `scripts/patch-export.sh`. Then r
 | POC 5: ICU (runtime dlopen, with and without) | see `scripts/test-icu.sh` |
 | POC 5: native Wayland (wlroots compositor, no X server) | see `scripts/test-wayland.sh` |
 | POC 5: Wayland input automation | see `scripts/test-wayland-input.sh` |
+| POC 5: the toolkit is pluggable (GTK4 + Qt6 embedders) | `scripts/test-embedders.sh` |
 | POC 5: IME probe (text-input-v3, full loop) | see FINDINGS Jalon 10 |
 
 `run-native.sh` takes an architecture as its third argument (`arm64` by default, or `x64`), so the same

@@ -60,6 +60,23 @@ single shared runner image (`scripts/docker/Dockerfile.run`). PNG captures land 
 produced binary has no JVM. Override the compose checkout with `CMC_ROOT=/abs/path scripts/run-native.sh ...`
 or the build's `-PcmcRoot=`.
 
+## Is the window toolkit baked in? (POC 5, Jalon 13)
+
+```bash
+scripts/test-embedders.sh                    # GTK4 and Qt6 embedders, same compose klib
+```
+
+Builds two more embedders that drive the very same compose klib and the same 42 Linux actuals as the GLFW
+build, and neither links `-lglfw`. It then checks, with `readelf` rather than by assertion in prose, that the
+GTK and Qt binaries need **zero** GLFW symbols from the system, that the GLFW build **does** need them (the
+control: without it the check would prove nothing), and that each app renders material3 and a click on the
+`Button` increments the counter.
+
+This is the answer to Jake Wharton's objection that `expect/actual` "assumes there is only a single,
+canonical UI toolkit for each build target [...] If you actualize to GTK then it would be impossible to use
+for Qt." Needs `fetch-deps.sh` first: it stages GTK4 and compiles the Qt C++ shim (Qt is C++, and cinterop
+binds C only).
+
 ## JVM POCs (CMP Desktop, offscreen render): POC 1 and POC 6
 
 ```bash

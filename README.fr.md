@@ -161,6 +161,7 @@ l'app witness, puis la dé-Android-ise avec `scripts/patch-export.sh`. Ensuite, 
 | POC 5 : ICU (dlopen au runtime, avec et sans) | voir `scripts/test-icu.sh` |
 | POC 5 : Wayland natif (compositeur wlroots, sans serveur X) | voir `scripts/test-wayland.sh` |
 | POC 5 : automatisation des entrées Wayland | voir `scripts/test-wayland-input.sh` |
+| POC 5 : la toolkit est enfichable (embedders GTK4 + Qt6) | `scripts/test-embedders.sh` |
 
 `run-native.sh` prend une architecture en troisième argument (`arm64` par défaut, ou `x64`), ce qui permet
 de faire tourner la même pile sur les deux architectures Linux :
