@@ -1,0 +1,5 @@
+headers = qtshim.h
+package = qtshim
+
+# Qt is C++ and cinterop binds C only, so this points at a hand-written extern "C" shim (native/qtshim/),
+# not at Qt itself. That shim is the whole cost of a C++ toolkit: GTK4, being plain C, needed no such file.

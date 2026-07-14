@@ -905,15 +905,36 @@ assertions, the real system clipboard included, so nothing regressed.
    on each frame fixes it. The GLFW mediator never needs this, because nobody else touches GL there. This is
    the real price of sharing a GL context with a toolkit that also draws.
 
-### Qt: verified as materially more expensive, and no longer necessary
+### Qt6: the control experiment, and it linked first try
 
-Kotlin/Native `cinterop` binds **C and Objective-C** only (the `.def` file's `language` property accepts
-nothing else). **Qt is C++ only**, with no C API, so binding it means hand-writing an `extern "C"` layer that
-owns the QObjects and marshals signals and slots back to Kotlin: a C++ codebase to maintain, not a `.def`
-file. GTK4, being plain C, cost none of that: cinterop swallowed its 804 headers in 8 seconds with no shim.
+GTK alone leaves one doubt: was the seam quietly shaped around GTK? Qt answers it, because Qt is the toolkit
+Wharton actually named ("if you actualize to GTK then it would be impossible to use for **Qt**"), and because
+it is as different from GTK as a toolkit can be.
 
-A Qt embedder is no longer needed to settle the question, though. Compose now references **no** toolkit, so a
-Qt embedder would exercise exactly the same seam GTK does.
+**The prediction, made before building: the Qt binary links with no GLFW, first try, with no change to
+Compose.** It did. The only fix needed was a missing `-L` search path for `libGLESv2` and friends, which is a
+staging detail, not a line of code. `readelf` on the Qt binary: **zero** undefined `glfw*` symbols, **zero**
+undefined `gtk_*` symbols. It renders material3 and a click on the `Button` takes the counter to 1
+(`docs/poc5-qt6-embedder.png`). Compose was not touched.
+
+Qt is also the **third** clipboard backend: `QGuiApplication::clipboard()` fills the very same seam that the
+GLFW mediator fills with GLFW's. Compose never learns that Qt exists.
+
+**And the cost of a C++ toolkit is now a number, not a guess.** `cinterop` binds **C and Objective-C** only
+(the `.def` file's `language` property accepts nothing else), and Qt is C++ with no C API, so Qt cannot be
+bound at all. It needs a hand-written `extern "C"` shim that owns the QObjects and turns Qt's
+virtual-method events back into function pointers:
+
+| | GTK4 | Qt6 |
+|---|---|---|
+| C++ shim | **none** (plain C, cinterop direct) | **78 lines** of C++, plus a 29-line C header |
+| extra build step | none | compile the shim inside Linux, with Qt's headers |
+| default framebuffer | its own FBO (`id=1`) | framebuffer **0** |
+| Skia's GL state | goes stale, needs `resetAll()` per frame | same |
+
+That shim is the honest price to quote to anyone asking for Qt support. It is small here because the surface
+is small (a window, a GL context, mouse events, the clipboard); a real app would grow it. But it is a C++
+codebase to maintain inside a Kotlin/Native project, and GTK cost none of it.
 
 ### What this says to the upstream question
 

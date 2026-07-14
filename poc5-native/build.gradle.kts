@@ -85,6 +85,10 @@ kotlin {
                 project.file("native/gtk/include/harfbuzz"),
             )
         }
+        compilations.getByName("main").cinterops.create("qtshim") {
+            defFile(project.file("native/qtshim.def"))
+            includeDirs(project.file("native/qt/include"))
+        }
         binaries {
             executable("gtk") {
                 entryPoint = "gtkmain.main"
@@ -93,6 +97,21 @@ kotlin {
                     "-L${project.file("native/gtk/lib")}",
                     "-lgtk-4", "-lgobject-2.0", "-lglib-2.0", "-lgio-2.0",
                     "-lGLESv2", "-lEGL", "-lfontconfig", "-lfreetype",
+                    "--allow-shlib-undefined",
+                )
+            }
+            // Third embedder: Qt6. Qt is C++ and cinterop speaks C only, so this links a hand-written
+            // extern "C" shim (native/qtshim/) rather than Qt directly. Same deal as the GTK build: no
+            // -lglfw. If the clipboard seam really is toolkit-neutral, this links first try.
+            executable("qt") {
+                entryPoint = "qtmain.main"
+                linkerOpts(
+                    // GLESv2/EGL/fontconfig/freetype are staged under native/glfw/lib (historical name);
+                    // they are plain system libs, nothing to do with GLFW itself, which is NOT linked here.
+                    "-L${project.file("native/glfw/lib")}",
+                    "-L${project.file("native/qt/lib")}",
+                    "-lqtshim", "-lQt6Gui", "-lQt6Core",
+                    "-lGLESv2", "-lEGL", "-lfontconfig", "-lfreetype", "-lstdc++",
                     "--allow-shlib-undefined",
                 )
             }

@@ -134,6 +134,33 @@ EOF
   ' || { echo "[gtk] ERROR: could not stage GTK4. The GTK embedder will not build." >&2; exit 1; }
 fi
 
+# --- 3c. Qt6: compile the C++ shim, and stage Qt's libs (the THIRD embedder) ---
+# Qt is C++ and cinterop binds C only, so Kotlin/Native cannot see Qt at all. native/qtshim/ is a hand-written
+# extern "C" layer that owns the QObjects; it is compiled HERE, inside Linux, because it needs a C++ compiler
+# and Qt's headers. That compile step is the whole reason Qt costs more than GTK, which needed no shim.
+QT="$ROOT/poc5-native/native/qt"
+if [ ! -f "$QT/lib/libqtshim.so" ]; then
+  echo "[qt] building the Qt C++ shim + staging Qt6 (docker)..."
+  mkdir -p "$QT/lib" "$QT/include"
+  cp "$ROOT/poc5-native/native/qtshim/qtshim.h" "$QT/include/"
+  docker run --rm --platform linux/arm64 \
+    -v "$ROOT/poc5-native/native/qtshim:/src" -v "$QT:/out" debian:trixie-slim bash -lc '
+    set -e
+    cat > /etc/apt/sources.list.d/debian.sources <<EOF
+Types: deb
+URIs: http://deb.debian.org/debian
+Suites: trixie
+Components: main
+Trusted: yes
+EOF
+    apt-get update -qq >/dev/null 2>&1 || { sleep 3; apt-get update -qq >/dev/null 2>&1; }
+    apt-get install -y --no-install-recommends qt6-base-dev g++ pkg-config >/dev/null 2>&1
+    g++ -fPIC -shared -O2 /src/qtshim.cpp -o /out/lib/libqtshim.so \
+        $(pkg-config --cflags Qt6Gui) $(pkg-config --libs Qt6Gui)
+    for l in Qt6Gui Qt6Core Qt6OpenGL; do cp -P /usr/lib/aarch64-linux-gnu/lib$l.so* /out/lib/ 2>/dev/null || true; done
+  ' || { echo "[qt] ERROR: could not build the Qt shim. The Qt embedder will not build." >&2; exit 1; }
+fi
+
 # The IME test harness needs input-method-v2, which is a wlroots protocol: NOT in wayland-protocols, and not
 # packaged by Debian. It lives in the wlroots repo. Only the test-side fake IME uses it.
 PROTO="$ROOT/scripts/docker/protocols"

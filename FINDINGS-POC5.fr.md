@@ -950,16 +950,38 @@ assertions X11, presse-papiers système réel compris : aucune régression.
    d'autre ne touche à GL chez lui. C'est le vrai prix du partage d'un contexte GL avec une toolkit qui
    dessine elle aussi.
 
-### Qt : vérifié comme nettement plus cher, et devenu inutile
+### Qt6 : l'expérience témoin, et elle a linké du premier coup
 
-Le `cinterop` de Kotlin/Native ne lie que du **C et de l'Objective-C** (la propriété `language` du fichier
-`.def` n'accepte rien d'autre). **Qt est uniquement du C++**, sans API C : le lier imposerait d'écrire à la
-main une couche `extern "C"` qui possède les QObject et remarshalle signaux et slots vers Kotlin, soit une
-base de code C++ à maintenir, et non un fichier `.def`. GTK4, qui est du C pur, n'a rien coûté de tout cela :
-cinterop a avalé ses 804 en-têtes en 8 secondes, sans shim.
+GTK seul laisse un doute : la couture n'aurait-elle pas été taillée, sans le dire, sur mesure pour GTK ? Qt y
+répond, parce que Qt est précisément la toolkit que Wharton nommait (« if you actualize to GTK then it would
+be impossible to use for **Qt** »), et parce qu'elle est aussi différente de GTK qu'une toolkit peut l'être.
 
-Un embedder Qt n'est de toute façon plus nécessaire pour trancher la question : Compose ne référence plus
-**aucune** toolkit, donc un embedder Qt exercerait exactement la même couture que GTK.
+**La prédiction, faite avant de construire : le binaire Qt link sans GLFW, du premier coup, sans toucher à
+Compose.** C'est ce qui s'est passé. La seule correction nécessaire fut un chemin de recherche `-L` manquant
+pour `libGLESv2` et consorts, soit un détail d'étagement, pas une ligne de code. Au `readelf` sur le binaire
+Qt : **zéro** symbole `glfw*` non résolu, **zéro** symbole `gtk_*`. Il rend du material3 et un clic sur le
+`Button` porte le compteur à 1 (`docs/poc5-qt6-embedder.png`). Compose n'a pas été touché.
+
+Qt est aussi le **troisième** backend de presse-papiers : `QGuiApplication::clipboard()` remplit exactement la
+même couture que le médiateur GLFW remplit avec celui de GLFW. Compose n'apprend jamais que Qt existe.
+
+**Et le coût d'une toolkit C++ est désormais un chiffre, pas une conjecture.** Le `cinterop` ne lie que du
+**C et de l'Objective-C** (la propriété `language` du `.def` n'accepte rien d'autre), et Qt est du C++ sans
+API C : Qt ne peut donc pas être lié du tout. Il faut un shim `extern "C"` écrit à la main, qui possède les
+QObject et retransforme les événements de Qt (livrés par surcharge de méthode virtuelle) en pointeurs de
+fonction :
+
+| | GTK4 | Qt6 |
+|---|---|---|
+| shim C++ | **aucun** (C pur, cinterop direct) | **78 lignes** de C++, plus un en-tête C de 29 lignes |
+| étape de build en plus | aucune | compiler le shim dans Linux, avec les en-têtes de Qt |
+| framebuffer par défaut | son propre FBO (`id=1`) | framebuffer **0** |
+| état GL de Skia | devient périmé, `resetAll()` à chaque frame | pareil |
+
+Ce shim est le prix honnête à annoncer à qui réclame le support de Qt. Il est petit ici parce que la surface
+l'est (une fenêtre, un contexte GL, les événements souris, le presse-papiers) ; une vraie app le ferait
+grossir. Mais c'est une base de code C++ à maintenir dans un projet Kotlin/Native, et GTK n'a rien coûté de
+tel.
 
 ### Ce que ça dit à la question upstream
 

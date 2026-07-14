@@ -22,10 +22,12 @@ pilotant l'app avec de vraies entrées, pas en les simulant à l'intérieur du p
 
 **La toolkit de fenêtrage n'est pas figée dans le binaire.** L'objection de Jake Wharton à Compose sur Linux,
 c'est que l'`expect/actual` « suppose qu'il n'existe qu'une seule toolkit canonique par cible de compilation »,
-si bien qu'actualiser vers l'une casserait toutes les autres. C'est désormais testé plutôt que débattu : un
-second embedder pilote le même klib compose depuis **GTK4**, et le binaire GTK ne lie **aucun GLFW**
-(`readelf` : zéro symbole `glfw*` non résolu, contre 54 pour le build GLFW). Pour y arriver, il a fallu sortir
-de Compose une seule chose : le presse-papiers. Voir le Jalon 13 dans les findings.
+si bien qu'actualiser vers l'une casserait toutes les autres. C'est désormais testé plutôt que débattu : le
+même klib compose est piloté par **trois** embedders, **GLFW**, **GTK4** et **Qt6**, et les binaires GTK et Qt
+ne lient **aucun GLFW** (`readelf` : zéro symbole `glfw*` non résolu, contre 54 pour le build GLFW). Pour y
+arriver, il a fallu sortir de Compose une seule chose : le presse-papiers. Qt, qui est du C++ là où cinterop
+ne lie que du C, exige en plus un shim `extern "C"` de 78 lignes ; GTK, qui est du C pur, n'en exige aucun.
+Voir le Jalon 13 dans les findings.
 
 Non implémenté : **l'accessibilité** (aucune cible Kotlin/Native de Compose n'en a, macOS compris). Le rendu
 n'est mesuré qu'en **software GL**, jamais sur un vrai GPU. Et `ui`/`foundation`/`material3` ne sont

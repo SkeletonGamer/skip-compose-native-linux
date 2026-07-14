@@ -21,10 +21,11 @@ Everything is verified by driving the running app with real input, not by simula
 
 **The window toolkit is not baked in.** Jake Wharton's objection to Compose on Linux is that `expect/actual`
 "assumes there is only a single, canonical UI toolkit for each build target", so actualizing to one toolkit
-would break every other one. That is now tested rather than argued: a second embedder drives the same
-compose klib from **GTK4**, and the GTK binary links **no GLFW at all** (`readelf`: zero undefined `glfw*`
-symbols, versus 54 for the GLFW build). Getting there took moving exactly one thing out of Compose, the
-clipboard. See Jalon 13 in the findings.
+would break every other one. That is now tested rather than argued: the same compose klib is driven by
+**three** embedders, **GLFW**, **GTK4** and **Qt6**, and the GTK and Qt binaries link **no GLFW at all**
+(`readelf`: zero undefined `glfw*` symbols, versus 54 for the GLFW build). Getting there took moving exactly
+one thing out of Compose, the clipboard. Qt, being C++ where cinterop binds only C, additionally needs a
+78-line `extern "C"` shim; GTK, being plain C, needs none. See Jalon 13 in the findings.
 
 Not implemented: **accessibility** (no Kotlin/Native Compose target has any, macOS included). Rendering is
 measured under **software GL** only, never on a real GPU. And `ui`/`foundation`/`material3` are still
