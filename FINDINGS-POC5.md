@@ -383,6 +383,84 @@ upstream drift over months. That question stays open, and the Maven poll is what
 
 - Jalon 6 (this session): ~1 h (source set restructure + x86_64 libs + link + run).
 
+## Jalon 7: from "it renders" to "it is usable" (the platform layer)
+
+Jalons 1 to 6 proved the compose stack runs. They did not make it usable: `scene.sendKeyEvent` was never
+called, the mouse wheel was dead on both ends, the clipboard was a `String` in process memory, and the
+locale was hardcoded to `en-US`. An inventory of the 43 Linux actuals plus the mediator found 9 that were
+stubs by their own admission, and 2 `TODO()` that threw `NotImplementedError` at runtime.
+
+Two lots, both verified by driving the running app with **real X11 input** (`xdotool`) and reading back the
+**real system clipboard** (`xclip`) from another process. Nothing is simulated in-process: if a GLFW
+callback or an actual is not wired, the test fails.
+
+### Lot 1: keyboard, wheel, clipboard, cursors, resize, HiDPI
+
+| | Before | After |
+|---|---|---|
+| Keyboard | `sendKeyEvent` never called | `xdotool type "hello"` lands in the text field |
+| Mouse wheel | dead on both ends | the list scrolls (item 0 -> 5) |
+| Clipboard | a `String` in memory | `xclip`, another process, reads `copied:hello` |
+| Cursors | inert marker strings | real I-beam over the text field |
+| Resize | surface frozen at 520x300 | surface, render target and scene size rebuilt |
+| HiDPI | `Density(1f)` hardcoded | from `glfwGetWindowContentScale` |
+| Clock | `frame * 16ms` | `clock_gettime` (animations run in seconds, not frames) |
+
+The mediator now wires GLFW callbacks for key, char, scroll, mouse button, motion, resize and focus. They
+are `staticCFunction` (they capture nothing), so they push into a global queue that the frame loop drains.
+
+**`Key.linux.kt` did not need rewriting.** It carries Apple key codes, which the inventory flagged as a
+multi-day job. But Compose only ever compares keys against its own constants (`Key.Backspace`, `Key.C`),
+never against raw numbers, so a GLFW -> `Key` translation table in the mediator is enough. The constants'
+underlying values are irrelevant.
+
+Other actuals: clipboard goes through the real X11/Wayland selection via GLFW; `UriHandler` execs
+`xdg-open` (fork+execvp, so the uri never reaches a shell, which is what the JVM backend does on Linux
+too); the wheel `ScrollConfig` uses JetBrains' own `LinuxGnomeConfig` formula; `KeyMapping` switched from
+the macOS map (Cmd-based, so Ctrl+C did nothing) to the Ctrl-based one Compose Desktop uses on Linux.
+
+### Lot 2: system locale and right-to-left
+
+`Locale.current` reads the POSIX environment (`LC_ALL`, `LC_MESSAGES`, `LANG`) instead of returning
+`en-US`. `isRtl()` resolves against a table of RTL languages and scripts. The mediator derives the scene's
+`LayoutDirection` from it, which is what actually mirrors the UI: the scene defaults to `Ltr` forever
+otherwise, so this had to be done in the mediator, exactly as the desktop backend derives it from AWT's
+`ComponentOrientation`.
+
+With `LANG=ar_EG` the whole UI mirrors: `docs/poc5-lot2-rtl-arabic.png`.
+
+material3: `CalendarLocale` reads `LC_TIME`, and `PlatformDateFormat` lets the locale drive the first day
+of the week, the 12h/24h clock, and the order of the date input fields (region-derived, per CLDR territory
+data). It previously handed every locale on earth a US date format **and** a Monday-first week, which
+contradict each other.
+
+### Two bugs only the runtime tests could find
+
+- **The canvas was never cleared between frames.** Compose paints only what it owns, so every frame was
+  drawn on top of the last one. A static screen hid this completely; a text field turned the screen into
+  mush. This bug was present since Jalon 4 and invisible to the compiler.
+- **The pointer never moved.** `xdotool --window` sends synthetic events (XSendEvent): GLFW delivers the
+  wheel, but the pointer never actually moves, so Compose received every scroll at (0,0) and nothing
+  scrolled. Driving through XTEST (no `--window`) fixed it. The lesson is the POC's own: trust the real
+  run, not the compiler.
+
+### What is still missing, and what it costs
+
+- **ICU.** Month and weekday names are still English. This needs CLDR data. The blocker is not code, it is
+  a design decision: ICU exports **version-suffixed symbols** (`udat_open_72`, never `udat_open`), so a
+  binary linked against ICU 72 will not start on a distro shipping ICU 74. Options: link hard (fine only
+  if you control the distro), `dlopen`+`dlsym` with runtime suffix detection (portable, more code), or
+  embed minimal CLDR data (no dependency, limited coverage).
+- **IME** (`zwp_text_input_v3` or IBus/Fcitx over D-Bus). No virtual keyboard and no CJK input without it.
+  Not verifiable in this harness: it needs a real compositor or input-method daemon.
+- **Accessibility** (AT-SPI2 over D-Bus), rich clipboard (MIME types) and drag-and-drop. Note that the JVM
+  desktop backend has **no working Linux accessibility either** (`Accessibility.desktop.kt` returns early
+  on any OS that is not macOS or Windows), so this is an opportunity, not a regression.
+
+### Time spent
+
+- Jalon 7 (this session): ~2 h (inventory, Lot 1, Lot 2, X11 input test harness).
+
 ## Route A1 (full monorepo build): recipe + wall, and the Maven poll
 
 **Maven poll (2026-07-11, 17:45Z):** `org.jetbrains.compose.ui:ui-linuxarm64`,

@@ -132,6 +132,16 @@ the witness app, then de-Android-ifies it with `scripts/patch-export.sh`. Then r
 | POC 5: real material3, native | `scripts/run-native.sh poc5-native` |
 | POC 6: transpiled SkipUI, native (no JVM) | `scripts/run-native.sh poc6-native` |
 | POC 6: transpiled SkipUI on CMP Desktop (JVM) | `scripts/run-jvm.sh poc6-skip-cmp` |
+| POC 5: input acceptance test (real X11 events) | `scripts/run-input-test.sh` |
+| POC 5: locale + right-to-left test | see `scripts/test-locale.sh` |
+
+`run-native.sh` takes an architecture as its third argument (`arm64` by default, or `x64`), so the same
+stack can be run on both Linux architectures: `scripts/run-native.sh poc5-native release x64`.
+
+The input test is worth a word: it does not simulate input inside the app. It runs the binary under Xvfb
+and drives it with **real X11 events** via `xdotool` (keys, mouse wheel, pointer, window resize), then
+reads the **real system clipboard** back with `xclip` from another process. That is how the platform layer
+is verified: if a GLFW callback or a platform actual is not wired, the test fails.
 
 Prerequisites (a JDK, Docker, the Skip toolchain), overrides and the full matrix are in
 [`scripts/README.md`](./scripts/README.md).

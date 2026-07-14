@@ -394,6 +394,90 @@ et c'est le poll Maven qui la surveille.
 
 - Jalon 6 (cette session) : ~1 h (restructuration des source sets + libs x86_64 + link + run).
 
+## Jalon 7 : de « ça rend » à « ça s'utilise » (la couche plateforme)
+
+Les Jalons 1 à 6 ont prouvé que la pile compose tourne. Ils ne l'ont pas rendue utilisable :
+`scene.sendKeyEvent` n'était jamais appelé, la molette était morte des deux côtés, le presse-papiers était
+une `String` en mémoire du process, et la locale était figée à `en-US`. Un inventaire des 43 actuals Linux
+et du mediator a trouvé 9 stubs assumés (leurs propres commentaires le disaient) et 2 `TODO()` qui
+levaient `NotImplementedError` à l'exécution.
+
+Deux lots, tous deux vérifiés en pilotant l'app avec de **vrais événements X11** (`xdotool`) et en relisant
+le **vrai presse-papiers système** (`xclip`) depuis un autre processus. Rien n'est simulé en interne : si
+une callback GLFW ou un actual n'est pas branché, le test échoue.
+
+### Lot 1 : clavier, molette, presse-papiers, curseurs, redimensionnement, HiDPI
+
+| | Avant | Après |
+|---|---|---|
+| Clavier | `sendKeyEvent` jamais appelé | `xdotool type "hello"` atterrit dans le champ |
+| Molette | morte des deux côtés | la liste scrolle (item 0 -> 5) |
+| Presse-papiers | une `String` en mémoire | `xclip`, autre processus, lit `copied:hello` |
+| Curseurs | chaînes marqueurs inertes | vrai I-beam au survol du champ |
+| Redimensionnement | surface figée à 520x300 | surface, render target et taille de scène reconstruits |
+| HiDPI | `Density(1f)` en dur | vient de `glfwGetWindowContentScale` |
+| Horloge | `frame * 16ms` | `clock_gettime` (les animations avancent en secondes, pas en frames) |
+
+Le mediator branche désormais les callbacks GLFW pour key, char, scroll, bouton souris, mouvement,
+redimensionnement et focus. Ce sont des `staticCFunction` (elles ne capturent rien) : elles poussent dans
+une file globale que la boucle de frames draine.
+
+**`Key.linux.kt` n'a PAS eu besoin d'être réécrit.** Il porte les keycodes Apple, ce que l'inventaire
+donnait pour plusieurs jours de travail. Mais Compose ne compare jamais que contre ses propres constantes
+(`Key.Backspace`, `Key.C`), jamais contre des valeurs brutes : une table de traduction GLFW -> `Key` dans
+le mediator suffit. Les valeurs numériques des constantes n'ont aucune importance.
+
+Autres actuals : le presse-papiers passe par la vraie sélection X11/Wayland via GLFW ; `UriHandler` exécute
+`xdg-open` (fork+execvp, donc l'URI ne passe jamais par un shell, ce que fait aussi le backend JVM sur
+Linux) ; le `ScrollConfig` de la molette reprend la formule `LinuxGnomeConfig` de JetBrains ; `KeyMapping`
+passe du mapping macOS (adossé à Cmd, donc Ctrl+C ne faisait rien) au mapping Ctrl que Compose Desktop
+utilise sur Linux.
+
+### Lot 2 : locale système et droite-à-gauche
+
+`Locale.current` lit l'environnement POSIX (`LC_ALL`, `LC_MESSAGES`, `LANG`) au lieu de renvoyer `en-US`.
+`isRtl()` se résout contre une table de langues et de scripts RTL. Le mediator en dérive le
+`LayoutDirection` de la scène, et c'est ça qui met réellement l'UI en miroir : sans quoi la scène reste
+`Ltr` pour toujours. Il fallait donc le faire dans le mediator, exactement comme le backend desktop le
+dérive du `ComponentOrientation` d'AWT.
+
+Avec `LANG=ar_EG`, toute l'UI passe en miroir : `docs/poc5-lot2-rtl-arabic.png`.
+
+material3 : `CalendarLocale` lit `LC_TIME`, et `PlatformDateFormat` laisse la locale piloter le premier
+jour de la semaine, l'horloge 12h/24h et l'ordre des champs de saisie de date (dérivés de la région,
+d'après les données de territoire CLDR). Il servait auparavant à toutes les locales de la terre un format
+de date US **et** une semaine commençant le lundi, ce qui est contradictoire.
+
+### Deux bugs que seuls les tests d'exécution pouvaient trouver
+
+- **Le canvas n'était jamais nettoyé entre les frames.** Compose ne peint que ce qu'il possède : chaque
+  frame était donc dessinée par-dessus la précédente. Un écran statique le masquait complètement ; un champ
+  de texte transformait l'écran en bouillie. Le bug existait depuis le Jalon 4 et était invisible au
+  compilateur.
+- **Le pointeur ne bougeait jamais.** `xdotool --window` envoie des événements synthétiques (XSendEvent) :
+  GLFW livre bien la molette, mais le pointeur ne se déplace pas réellement, donc Compose recevait tous les
+  scrolls en (0,0) et rien ne scrollait. Passer par XTEST (sans `--window`) a réglé le problème. La leçon
+  est celle du POC lui-même : se fier au run réel, pas au compilateur.
+
+### Ce qui manque encore, et ce que ça coûte
+
+- **ICU.** Les noms de mois et de jours restent en anglais. Il faut des données CLDR. Le blocage n'est pas
+  du code, c'est une décision de conception : ICU exporte des **symboles suffixés par la version**
+  (`udat_open_72`, jamais `udat_open`), donc un binaire lié à ICU 72 ne démarrera pas sur une distribution
+  qui livre ICU 74. Options : lien dur (acceptable seulement si l'on maîtrise la distribution),
+  `dlopen`+`dlsym` avec détection du suffixe à l'exécution (portable, plus de code), ou embarquer des
+  données CLDR minimales (aucune dépendance, couverture limitée).
+- **IME** (`zwp_text_input_v3` ou IBus/Fcitx via D-Bus). Sans lui, pas de clavier virtuel ni de saisie CJK.
+  Non vérifiable dans ce harnais : il faut un vrai compositeur ou un démon de méthode de saisie.
+- **Accessibilité** (AT-SPI2 via D-Bus), presse-papiers riche (types MIME) et glisser-déposer. À noter : le
+  backend desktop JVM **n'a pas non plus d'accessibilité Linux fonctionnelle**
+  (`Accessibility.desktop.kt` sort immédiatement sur tout OS autre que macOS et Windows) : c'est donc une
+  occasion de faire mieux, pas une régression.
+
+### Temps passé
+
+- Jalon 7 (cette session) : ~2 h (inventaire, Lot 1, Lot 2, harnais de test d'entrées X11).
+
 ## Route A1 (build monorepo complet) : recette + mur, et le poll Maven
 
 **Poll Maven (2026-07-11, 17:45Z) :** `org.jetbrains.compose.ui:ui-linuxarm64`,
