@@ -43,8 +43,10 @@ import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.platform.FrameRecomposer
 import androidx.compose.ui.scene.CanvasLayersComposeScene
+import androidx.compose.ui.text.intl.isRightToLeft
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.rememberCoroutineScope
 import glfw.*
@@ -106,9 +108,13 @@ private fun App(clipboard: Clipboard) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    val locale = androidx.compose.ui.text.intl.Locale.current
     MaterialTheme {
         Column(Modifier.padding(16.dp)) {
             Text("Compose material3 on Kotlin/Native Linux, no JVM")
+            // Locale comes from the POSIX environment now, not a hardcoded en-US. With LANG=ar_EG the
+            // whole column mirrors, because the scene's LayoutDirection follows it.
+            Text("locale: ${locale.toLanguageTag()}", Modifier.padding(top = 4.dp))
 
             // Keyboard: typing here proves glfwSetCharCallback -> scene.sendKeyEvent -> Compose.
             OutlinedTextField(
@@ -249,11 +255,20 @@ fun main() = runBlocking {
             logln("POC5: cursor -> $kind")
         }
     }
+    // Text direction follows the system locale, the way the desktop backend derives it from AWT's
+    // ComponentOrientation. Without this the scene is always Ltr, so an Arabic or Hebrew locale would
+    // still lay out left-to-right.
+    val locale = androidx.compose.ui.text.intl.Locale.current
+    val layoutDirection =
+        if (locale.isRightToLeft()) LayoutDirection.Rtl else LayoutDirection.Ltr
+    logln("POC5: locale = ${locale.toLanguageTag()}, layout direction = $layoutDirection")
+
     val frameRecomposer = FrameRecomposer(coroutineContext)
     val scene = CanvasLayersComposeScene(
         frameRecomposer = frameRecomposer,
         density = density,
         size = IntSize(width, height),
+        layoutDirection = layoutDirection,
         platformContext = platformContext,
     )
 

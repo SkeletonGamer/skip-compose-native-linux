@@ -1,6 +1,10 @@
-// POC 5 Jalon 3: actual Linux du formateur de dates du DatePicker. macOS s'appuie sur NSDateFormatter ;
-// ici une implementation portee sur kotlinx-datetime avec des libelles anglais. Suffisante pour compiler
-// material3 et afficher un DatePicker ; un mediator reel brancherait ICU/fontconfig pour la vraie i18n.
+// Linux actual for the DatePicker's date formatter. macOS leans on NSDateFormatter; this is written on
+// kotlinx-datetime.
+//
+// What the locale now drives: first day of week, 12h vs 24h clock, and the order of the date input fields
+// (region-derived, following CLDR territory data). What it still does NOT drive: the month and weekday
+// NAMES, which stay English. Those need CLDR data, i.e. ICU4C, and no amount of arithmetic substitutes
+// for it. A locale-aware DatePicker therefore still needs the ICU work (see FINDINGS, Lot 3).
 @file:OptIn(kotlin.time.ExperimentalTime::class)
 
 package androidx.compose.material3.internal
@@ -20,9 +24,26 @@ private val WEEKDAYS = listOf(
     "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
 )
 
+// Regions where the week starts on Sunday, and where the 12-hour clock is the norm. These follow the
+// CLDR territory data. Deriving them from the region is the part of localization that does NOT need ICU;
+// the month and weekday NAMES do, which is why they are still English below.
+private val SUNDAY_FIRST_REGIONS = setOf(
+    "US", "CA", "JP", "IL", "KR", "TW", "HK", "MO", "BR", "MX", "CO", "PE", "VE", "AR", "CL",
+    "PH", "IN", "ZA", "EG", "SA", "AE", "JO", "KW", "QA", "BH", "OM", "YE", "IQ", "SY", "LY",
+)
+private val TWELVE_HOUR_REGIONS = setOf(
+    "US", "CA", "AU", "NZ", "PH", "IN", "PK", "BD", "EG", "SA", "MY", "GB", "IE", "MX", "CO",
+)
+
 internal actual class PlatformDateFormat actual constructor(private val locale: CalendarLocale) {
 
-    actual val firstDayOfWeek: Int get() = 1 // Monday (ISO 1..7)
+    // "fr-FR" -> "FR". Empty when the tag carries no region ("fr").
+    private val region: String
+        get() = locale.languageTag.split("-", "_").drop(1).firstOrNull { it.length == 2 }?.uppercase() ?: ""
+
+    // ISO 1..7 (Monday == 1). Used to be hardcoded to Monday, which contradicted the US date format the
+    // same class returned.
+    actual val firstDayOfWeek: Int get() = if (region in SUNDAY_FIRST_REGIONS) 7 else 1
 
     actual val weekdayNames: List<Pair<String, String>>
         get() = WEEKDAYS.map { it to it.substring(0, 3) }
@@ -46,9 +67,15 @@ internal actual class PlatformDateFormat actual constructor(private val locale: 
         cache: MutableMap<String, Any>,
     ): CalendarDate? = parseNumeric(date, pattern)
 
-    actual fun getDateInputFormat(): DateInputFormat = DateInputFormat("MM/dd/yyyy", '/')
+    // US puts the month first; most of the world puts the day first; CJK and ISO-style locales go
+    // year-first. Previously hardcoded to the US form for every locale on earth.
+    actual fun getDateInputFormat(): DateInputFormat = when (region) {
+        "US" -> DateInputFormat("MM/dd/yyyy", '/')
+        "CN", "JP", "KR", "TW", "HU", "LT" -> DateInputFormat("yyyy/MM/dd", '/')
+        else -> DateInputFormat("dd/MM/yyyy", '/')
+    }
 
-    actual fun is24HourFormat(): Boolean = false
+    actual fun is24HourFormat(): Boolean = region !in TWELVE_HOUR_REGIONS
 
     private fun dateOf(millis: Long): LocalDate =
         Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC).date
