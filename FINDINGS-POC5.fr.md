@@ -343,6 +343,57 @@ poignée de petits actuals Linux), tant que JetBrains n'a pas publié les artefa
 
 - Jalon 5 (cette session) : ~20 min (build release + mesure RSS).
 
+## Jalon 6 : la même pile en linuxX64 (x86_64), sans code spécifique à l'architecture
+
+Les Jalons 1 à 5 visaient tous **linuxArm64**. SKIKO-611, le ticket qui traque le K/N Linux, parle de
+**x86_64**. La question ouverte était donc : est-ce que tout ça se transpose à l'autre architecture, ou
+bien arm64 avait-il quelque chose de particulier ?
+
+Ça se transpose, et il n'y avait rien à porter.
+
+**Ce qui a changé** (plomberie de build uniquement, zéro Kotlin écrit) :
+
+- `src/linuxArm64Main/` -> `src/linuxMain/`, un source set partagé par les deux cibles Linux. C'est la
+  structure qu'utilise la PR upstream #2027 (`compose/ui/ui/src/linuxMain/...`).
+- Cible `linuxX64` déclarée à côté de `linuxArm64` ; les deux passent par le même helper `linuxTarget()`.
+- Cinterop GLFW commonisé (`kotlin.mpp.enableCInteropCommonization=true`) : le `.def` ne contient que des
+  headers, donc les bindings se résolvent depuis le source set partagé.
+- `linkerOpts` est le **seul** paramètre dépendant de l'architecture : quels `.so` lier
+  (`native/glfw/lib` pour arm64, `native/glfw/lib-x64` pour x86_64). C'est du linkage, pas du Compose.
+- `scripts/fetch-deps.sh` extrait aussi les `.so` x86_64 ; `scripts/run-native.sh` prend un argument
+  d'architecture (`arm64` par défaut, donc les appels existants sont inchangés).
+
+**Résultat.** `compileKotlinLinuxX64` passe au vert du premier coup, 0 erreur. Les deux klibs sont
+structurellement identiques : 101 packages compose chacun (48 `ui`, 39 `foundation`, 7 `material3`,
+4 `animation`), 23 Mo d'IR chacun, avec `MaterialTheme`, `Button`, `Scaffold`, `LazyColumn`, `DatePicker`
+et `CanvasLayersComposeScene` présents dans le klib x64. Aucun des 44 actuals Linux n'a eu besoin d'être
+scindé entre arm64 et x64.
+
+| | linuxArm64 | linuxX64 |
+|---|---|---|
+| Compilation | 0 erreur | 0 erreur |
+| Binaire release | 35 Mo | **38 Mo** (ELF x86-64) |
+| Rend du material3 | oui | oui |
+| Clic -> `count` 0 à 1 | oui | oui |
+
+Lancé avec `scripts/run-native.sh poc5-native release x64`, dans un conteneur `linux/amd64` sous Xvfb.
+Captures : `docs/poc5-material3-knative-x64.png` (count: 0) et
+`docs/poc5-material3-after-knative-x64.png` (count: 1).
+
+**Réserves.** Le x86_64 tourne en **émulation qemu** sur un hôte ARM, et le rendu est **software
+(llvmpipe)** : ça ne dit donc rien de la fluidité GPU sur du vrai matériel x86. Le clic est **synthétique**
+(injecté), comme au Jalon 4. Même niveau de preuve que les Jalons 4/5, transposé au x64 : ni plus, ni moins.
+
+**Rebuild depuis un `jb-main` frais.** `.cmc` a été recloné depuis `jb-main` HEAD le 2026-07-14 et la
+baseline arm64 compile toujours avec 0 erreur, sans un seul patch. C'est une vérification à quelques jours,
+pas sur la durée : le POC a été écrit quelques jours plus tôt. Ça montre donc que la recette se reproduit
+depuis un clone propre, pas qu'elle résiste à la dérive upstream sur des mois. Cette question reste ouverte,
+et c'est le poll Maven qui la surveille.
+
+### Temps passé
+
+- Jalon 6 (cette session) : ~1 h (restructuration des source sets + libs x86_64 + link + run).
+
 ## Route A1 (build monorepo complet) : recette + mur, et le poll Maven
 
 **Poll Maven (2026-07-11, 17:45Z) :** `org.jetbrains.compose.ui:ui-linuxarm64`,
@@ -350,6 +401,23 @@ poignée de petits actuals Linux), tant que JetBrains n'a pas publié les artefa
 `org.jetbrains.androidx.navigationevent:navigationevent-linuxarm64` → **tous 404 (pas encore
 publiés)**. Les klibs de la **fondation** (skiko, runtime, runtime-saveable, lifecycle, savedstate,
 collection, annotation) **sont** publiés pour K/N Linux : un rollout partiel, en cours.
+
+**Poll Maven (2026-07-14), x64 inclus cette fois :** `ui`, `foundation` et `material3` sont toujours
+**404 pour `linuxx64` comme pour `linuxarm64`**, en 1.12.0-beta02 (la dernière). `skiko` 0.150.1 et
+`compose.runtime` 1.12.0-beta02 publient **les deux** architectures Linux. Le trou que comble ce POC est
+donc inchangé après 14 mois, et il n'est pas propre à arm64 : personne ne publie la couche UI pour K/N
+Linux.
+
+**Pourquoi ça manque toujours, côté upstream.** La PR de Thomas Vos
+[compose-multiplatform-core#2027](https://github.com/JetBrains/compose-multiplatform-core/pull/2027)
+(« Compose UI for native Linux ») est **ouverte en draft depuis le 2025-04-16**, sans aucune revue
+JetBrains. Le blocage n'est pas du code manquant, c'est une question de design restée sans réponse, qu'il
+pose lui-même dans la PR : avec `expect/actual`, actualiser la couche de fenêtrage vers Wayland casse le
+cas d'usage embarqué / sans window manager, et il n'y a pas de moyen propre de la rendre enfichable. Jake
+Wharton fait le même constat dans le thread `#compose` du Slack Kotlin, et JetBrains (Ivan Matkov) a
+confirmé vouloir passer à du polymorphisme, « mais ce n'est pas si simple ». Son travail sur skiko, lui, a
+bien atterri : `skiko#1051` (cible linuxArm64) et `skiko#1052` (EGL) sont mergés et publiés, ce qui
+explique que la fondation soit en place alors que la couche UI ne l'est pas.
 
 **Recette route A1** (builder `compose-multiplatform-core` depuis HEAD, établie depuis les fichiers de
 build du fork) :

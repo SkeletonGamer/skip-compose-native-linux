@@ -18,12 +18,17 @@ else
     https://github.com/JetBrains/compose-multiplatform-core .cmc
 fi
 
-# --- 2. native libs + headers for linux/arm64 ---
-STAGE="$ROOT/.native-stage"
-if [ ! -f "$STAGE/lib/libglfw.so.3" ]; then
-  echo "[native] extracting GLFW/GL/EGL/fontconfig/freetype for linux/arm64 (docker)..."
-  rm -rf "$STAGE"; mkdir -p "$STAGE/lib" "$STAGE/include"
-  docker run --rm --platform linux/arm64 -v "$STAGE:/stage" debian:bookworm-slim bash -lc '
+# --- 2. native libs + headers, per Linux architecture ---
+# arm64 is the default target of every native POC; x64 exists so POC 5 can prove the compose stack is
+# arch-neutral (same sources, both Linux architectures). Headers are arch-independent: staged once.
+# $1 = docker platform, $2 = Debian multiarch triplet, $3 = stage dir
+extract_native() {
+  local platform="$1" triplet="$2" stage="$3"
+  [ -f "$stage/lib/libglfw.so.3" ] && return 0
+  echo "[native] extracting GLFW/GL/EGL/fontconfig/freetype for $platform (docker)..."
+  rm -rf "$stage"; mkdir -p "$stage/lib" "$stage/include"
+  docker run --rm --platform "$platform" -v "$stage:/stage" -e TRIPLET="$triplet" \
+    debian:bookworm-slim bash -lc '
     set -e
     # Some Docker/network setups break apt gpgv on the release signatures even though the download itself
     # is intact (verified: wget fetches the InRelease fine). Mark the repos Trusted so apt skips the gpg
@@ -46,26 +51,32 @@ EOF
       libglfw3 libglfw3-dev \
       libgl1-mesa-dri libglx-mesa0 libgl1 libegl1 libgles2 \
       libfontconfig1 libfontconfig-dev libfreetype6 libfreetype-dev >/dev/null
-    cp -aL /usr/lib/aarch64-linux-gnu/libglfw.so* /stage/lib/ 2>/dev/null || true
-    cp -aL /usr/lib/aarch64-linux-gnu/libGL.so* /usr/lib/aarch64-linux-gnu/libEGL.so* /stage/lib/ 2>/dev/null || true
-    cp -aL /usr/lib/aarch64-linux-gnu/libfontconfig.so* /usr/lib/aarch64-linux-gnu/libfreetype.so* /stage/lib/ 2>/dev/null || true
+    cp -aL /usr/lib/$TRIPLET/libglfw.so* /stage/lib/ 2>/dev/null || true
+    cp -aL /usr/lib/$TRIPLET/libGL.so* /usr/lib/$TRIPLET/libEGL.so* /stage/lib/ 2>/dev/null || true
+    cp -aL /usr/lib/$TRIPLET/libfontconfig.so* /usr/lib/$TRIPLET/libfreetype.so* /stage/lib/ 2>/dev/null || true
     cp -aL /usr/include/GLFW/glfw3.h /usr/include/GLFW/glfw3native.h /stage/include/ 2>/dev/null || true
   ' || true
   # Do not fail silently: if the apt step could not produce the libs, say so with a concrete hint.
-  if [ ! -f "$STAGE/lib/libglfw.so.3" ]; then
-    echo "[native] ERROR: could not extract the Linux arm64 native libs via Docker." >&2
+  if [ ! -f "$stage/lib/libglfw.so.3" ]; then
+    echo "[native] ERROR: could not extract the Linux native libs for $platform via Docker." >&2
     echo "[native] The Debian apt step failed (often a transient Docker network / apt-signature glitch)." >&2
     echo "[native] Fix: make sure Docker is running, then re-run scripts/fetch-deps.sh." >&2
     echo "[native] If it persists: 'docker pull debian:bookworm-slim' and retry, or check your network/proxy." >&2
     exit 1
   fi
-fi
+}
 
-# Distribute to each native POC that links against GLFW.
+STAGE="$ROOT/.native-stage"
+STAGE_X64="$ROOT/.native-stage-x64"
+extract_native linux/arm64 aarch64-linux-gnu "$STAGE"
+extract_native linux/amd64 x86_64-linux-gnu  "$STAGE_X64"
+
+# Distribute to each native POC that links against GLFW: lib/ = arm64, lib-x64/ = x86_64.
 for p in poc3-native poc4-native poc5-native poc6-native; do
   [ -d "$ROOT/$p" ] || continue
-  mkdir -p "$ROOT/$p/native/glfw/lib" "$ROOT/$p/native/glfw/include/GLFW"
+  mkdir -p "$ROOT/$p/native/glfw/lib" "$ROOT/$p/native/glfw/lib-x64" "$ROOT/$p/native/glfw/include/GLFW"
   cp -a "$STAGE/lib/." "$ROOT/$p/native/glfw/lib/" 2>/dev/null || true
+  cp -a "$STAGE_X64/lib/." "$ROOT/$p/native/glfw/lib-x64/" 2>/dev/null || true
   cp -a "$STAGE/include/glfw3.h" "$STAGE/include/glfw3native.h" \
      "$ROOT/$p/native/glfw/include/GLFW/" 2>/dev/null || true
 done

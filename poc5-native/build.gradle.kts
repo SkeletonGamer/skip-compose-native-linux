@@ -1,6 +1,7 @@
-// POC 5: compile the real JetBrains compose.ui stack for Kotlin/Native linuxArm64 from source,
-// with the proper KMP hierarchy: commonMain -> nonJvmMain -> skikoMain -> linuxArm64Main.
-// skiko pinned to the version jb-main targets (0.150.1).
+// POC 5: compile the real JetBrains compose.ui stack for Kotlin/Native Linux from source,
+// with the proper KMP hierarchy: commonMain -> nonJvmMain -> skikoMain -> linuxMain -> linux{Arm64,X64}Main.
+// Both Linux architectures share linuxMain: nothing in the compose stack is arch-specific.
+// skiko pinned to the version jb-main targets (0.150.1), which publishes linuxArm64 AND linuxX64.
 plugins {
     kotlin("multiplatform") version "2.3.0"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.0"
@@ -28,7 +29,11 @@ fun org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet.srcsRoot(vararg rel: Stri
 kotlin {
     // Jalon 4: same module compiles the compose.ui source AND the ui-glfw mediator, so the mediator
     // can reach compose's `internal` API (WindowInfoImpl, PlatformContext.Empty, ...) directly.
-    linuxArm64 {
+    // The GLFW cinterop is header-only (see native/glfw.def), so it commonizes across both Linux
+    // architectures; only linking needs the per-arch .so files.
+    // libDir is the ONLY architecture-dependent input: the per-arch .so files to link against
+    // (fetch-deps.sh stages them). The Kotlin sources are identical for both architectures.
+    fun org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget.linuxTarget(libDir: String) {
         compilations.getByName("main").cinterops.create("glfw") {
             defFile(project.file("native/glfw.def"))
             includeDirs(project.file("native/glfw/include"))
@@ -37,13 +42,15 @@ kotlin {
             executable {
                 entryPoint = "main"
                 linkerOpts(
-                    "-L${project.file("native/glfw/lib")}",
+                    "-L${project.file(libDir)}",
                     "-lglfw", "-lGL", "-lEGL", "-lfontconfig", "-lfreetype",
                     "--allow-shlib-undefined",
                 )
             }
         }
     }
+    linuxArm64 { linuxTarget("native/glfw/lib") }
+    linuxX64 { linuxTarget("native/glfw/lib-x64") }
 
     // The real compose-ui build opts in globally to these (cross-module internal/experimental APIs).
     sourceSets.all {
@@ -72,14 +79,18 @@ kotlin {
         }
     }
 
-    // Real jb-main hierarchy: commonMain -> skikoMain -> nonJvmMain -> nativeMain(=linuxArm64Main).
+    // Real jb-main hierarchy: commonMain -> skikoMain -> nonJvmMain -> linuxMain -> linux{Arm64,X64}Main.
+    // linuxMain holds the whole Linux actual surface; the leaf source sets stay empty, which is the
+    // claim under test: the compose stack is arch-neutral (upstream PR #2027 assumes the same).
     val commonMain = sourceSets.getByName("commonMain")
     val skikoMain = sourceSets.create("skikoMain")
     val nonJvmMain = sourceSets.create("nonJvmMain")
-    val linuxArm64Main = sourceSets.getByName("linuxArm64Main")
+    val linuxMain = sourceSets.create("linuxMain")
     skikoMain.dependsOn(commonMain)
     nonJvmMain.dependsOn(skikoMain)
-    linuxArm64Main.dependsOn(nonJvmMain)
+    linuxMain.dependsOn(nonJvmMain)
+    sourceSets.getByName("linuxArm64Main").dependsOn(linuxMain)
+    sourceSets.getByName("linuxX64Main").dependsOn(linuxMain)
 
     commonMain.apply {
         srcs(
@@ -161,19 +172,19 @@ kotlin {
     )
 
     // Native (Linux K/N) actuals: incl. skikoExcludingWeb (skiko desktop+native, not web).
-    linuxArm64Main.srcs(
+    linuxMain.srcs(
         "ui-graphics/src/skikoExcludingWebMain",
         "ui-graphics/src/nativeMain",
         "ui-text/src/nativeMain",
         "ui/src/nativeMain",
     )
-    linuxArm64Main.srcsRoot(
+    linuxMain.srcsRoot(
         "navigationevent/navigationevent/src/nativeMain",
         "compose/foundation/foundation/src/nativeMain",
         "compose/material3/material3/src/nativeMain",
     )
     // Use our skiko-version-shimmed NativeFont instead of the HEAD original (see NativeFontPatched.kt).
-    linuxArm64Main.kotlin.exclude("**/platform/NativeFont.native.kt")
+    linuxMain.kotlin.exclude("**/platform/NativeFont.native.kt")
     // The skiko postDelayed actual uses Dispatchers.Main (absent on K/N Linux). Replace it with a
     // frame-loop-drained version (see LinuxPostDelayed.kt). linux is the only target, so excluding it
     // from skikoMain is safe.

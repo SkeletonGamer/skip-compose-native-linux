@@ -23,6 +23,7 @@ local.properties
 
 # Third-party native libs/headers: obtained at build time (apt in the Docker image), not vendored
 **/native/glfw/lib/
+**/native/glfw/lib-x64/
 **/native/glfw/include/
 
 # Docker render outputs, run captures, build scratch (regenerated)
@@ -38,5 +39,6 @@ CLAUDE.md
 # Skip's transpiled Kotlin output (obtained via `skip export`; licensing; large)
 export/
 
-# Native libs staging (scripts/fetch-deps.sh)
+# Native libs staging (scripts/fetch-deps.sh), one per architecture
 .native-stage/
+.native-stage-x64/
